@@ -12,7 +12,8 @@
       },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://farm-reports-production.up.railway.app/api"
-      }
+      },
+      "channel": "preview"
     },
     "production": {
       "android": {
@@ -20,7 +21,8 @@
       },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://farm-reports-production.up.railway.app/api"
-      }
+      },
+      "channel": "production"
     }
   }
 }

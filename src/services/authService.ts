@@ -43,6 +43,7 @@ export const authService = {
       farmId: Number(payload.farmId),
       farmName: String(payload.farmName),
       userName: String(payload.userName),
+      role: String(payload.role ?? 'USER'),
     };
   },
 

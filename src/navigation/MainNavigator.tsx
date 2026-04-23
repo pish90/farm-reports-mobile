@@ -7,6 +7,7 @@ import AttendanceScreen from '../screens/AttendanceScreen';
 import ExpensesScreen from '../screens/expenses/ExpensesScreen';
 import LivestockScreen from '../screens/livestock/LivestockScreen';
 import MilkScreen from '../screens/milk/MilkScreen';
+import WorkersScreen from '../screens/WorkersScreen';
 import { useAuth } from '../store/AuthContext';
 import {
   AttendanceStackParamList,
@@ -28,6 +29,16 @@ function AttendanceNavigator() {
   return (
     <AttendanceStack.Navigator screenOptions={{ headerShown: false }}>
       <AttendanceStack.Screen name="AttendanceHome" component={AttendanceScreen} />
+      <AttendanceStack.Screen
+        name="Workers"
+        component={WorkersScreen}
+        options={{
+          headerShown: true,
+          title: 'Manage Workers',
+          headerTitleStyle: { fontWeight: '600', fontSize: 17 },
+          headerTintColor: '#2d6a4f',
+        }}
+      />
     </AttendanceStack.Navigator>
   );
 }

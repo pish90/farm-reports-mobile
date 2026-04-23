@@ -15,6 +15,7 @@ import {
   getLocalReport,
   getOrCreateLocalReport,
   getReportSectionSummary,
+  updateReportDraft,
   updateReportSubmitted,
 } from '../db/reportRepository';
 import apiClient from '../services/apiClient';
@@ -136,8 +137,10 @@ export default function SummaryScreen() {
   const [summary,     setSummary]     = useState<SectionSummary | null>(null);
   const [isLoading,   setIsLoading]   = useState(true);
   const [loadError,   setLoadError]   = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isSubmitting,  setIsSubmitting]  = useState(false);
+  const [submitError,   setSubmitError]   = useState<string | null>(null);
+  const [isReopening,   setIsReopening]   = useState(false);
+  const [reopenError,   setReopenError]   = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -192,6 +195,25 @@ export default function SummaryScreen() {
     }
   }
 
+  async function handleReopen() {
+    if (!report || !user) return;
+    setIsReopening(true);
+    setReopenError(null);
+    try {
+      if (report.server_report_id) {
+        await apiClient.post(`/reports/${report.server_report_id}/reopen`, {});
+      }
+      await updateReportDraft(report.id);
+      const updated = await getLocalReport(report.id);
+      setReport(updated);
+    } catch (e: any) {
+      const msg = e.response?.data?.message ?? e.message ?? 'Reopen failed. Please try again.';
+      setReopenError(msg);
+    } finally {
+      setIsReopening(false);
+    }
+  }
+
   // ── Derived state ──────────────────────────────────────────────────────────
   const isSubmitted = report?.status === 'submitted';
   const canSubmit =
@@ -222,6 +244,31 @@ export default function SummaryScreen() {
             <Feather name="lock" size={14} color="#888" style={{ marginRight: 6 }} />
             <Text style={styles.lockedText}>This report is locked and read-only.</Text>
           </View>
+
+          {user?.role === 'ADMIN' && (
+            <>
+              {reopenError ? (
+                <View style={[styles.lockedNote, { marginTop: 12, borderColor: '#fed7d7', backgroundColor: '#fff5f5' }]}>
+                  <Text style={[styles.lockedText, { color: '#e53e3e' }]}>{reopenError}</Text>
+                </View>
+              ) : null}
+              <TouchableOpacity
+                style={styles.reopenBtn}
+                onPress={handleReopen}
+                disabled={isReopening}
+                activeOpacity={0.8}
+              >
+                {isReopening ? (
+                  <ActivityIndicator size="small" color="#2d6a4f" />
+                ) : (
+                  <>
+                    <Feather name="unlock" size={16} color="#2d6a4f" style={{ marginRight: 8 }} />
+                    <Text style={styles.reopenText}>Reopen Report</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </>
+          )}
         </View>
       </View>
     );
@@ -418,4 +465,16 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   lockedText: { fontSize: 13, color: '#888' },
+  reopenBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 28,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#2d6a4f',
+  },
+  reopenText: { fontSize: 15, fontWeight: '600', color: '#2d6a4f' },
 });

@@ -15,6 +15,7 @@ import {
   getOrCreateLocalReport,
   markSectionDirty,
   saveLivestock,
+  saveLivestockNotes,
 } from '../../db/reportRepository';
 import {
   CATEGORY_ORDER,
@@ -49,6 +50,7 @@ export default function LivestockScreen() {
   const [isLoaded,       setIsLoaded]       = useState(false);
   const [isSubmitted,    setIsSubmitted]    = useState(false);
   const [saveState,      setSaveState]      = useState<SaveState>('idle');
+  const [categoryNotes,  setCategoryNotes]  = useState<Record<string, string>>({});
 
   const debounceRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -91,6 +93,14 @@ export default function LivestockScreen() {
         defaults[`count_${row.livestock_type_id}`] = String(row.count);
       }
       reset(defaults);
+
+      const noteRows = await db.getAllAsync<{ category: string; note: string }>(
+        'SELECT category, note FROM local_livestock_notes WHERE report_id = ?', [report.id],
+      );
+      const notes: Record<string, string> = {};
+      for (const n of noteRows) notes[n.category] = n.note;
+      setCategoryNotes(notes);
+
       setIsLoaded(true);
     }
 
@@ -98,8 +108,12 @@ export default function LivestockScreen() {
   }, [user?.farmId, year, month, grouped]);
 
   // ── Auto-save with 500 ms debounce ───────────────────────────────────────
+  const handleNoteChange = useCallback((category: string, note: string) => {
+    setCategoryNotes((prev) => ({ ...prev, [category]: note }));
+  }, []);
+
   const performSave = useCallback(
-    async (values: LivestockFormValues, reportId: number, types: GroupedLivestockTypes) => {
+    async (values: LivestockFormValues, reportId: number, types: GroupedLivestockTypes, currentNotes: Record<string, string>) => {
       setSaveState('saving');
       try {
         const records = Object.values(types)
@@ -113,6 +127,12 @@ export default function LivestockScreen() {
 
         await saveLivestock(reportId, records);
         await markSectionDirty(reportId, 'livestock');
+
+        const noteEntries = Object.entries(types)
+          .map(([cat]) => ({ category: cat, note: currentNotes[cat] ?? '' }))
+          .filter((n) => n.note.trim());
+        await saveLivestockNotes(reportId, noteEntries);
+        await markSectionDirty(reportId, 'livestock-notes');
 
         setSaveState('saved');
         if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
@@ -129,13 +149,13 @@ export default function LivestockScreen() {
 
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      performSave(watchedValues, localReportId, grouped);
+      performSave(watchedValues as LivestockFormValues, localReportId, grouped, categoryNotes);
     }, 500);
 
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [watchedValues, isLoaded, localReportId, grouped]);
+  }, [watchedValues, categoryNotes, isLoaded, localReportId, grouped]);
 
   // ── Render ────────────────────────────────────────────────────────────────
   const orderedCategories = grouped
@@ -197,6 +217,8 @@ export default function LivestockScreen() {
               errors={errors}
               watch={watch}
               isSubmitted={isSubmitted}
+              note={categoryNotes[category] ?? ''}
+              onNoteChange={handleNoteChange}
             />
           ))}
           <View style={{ height: 32 }} />

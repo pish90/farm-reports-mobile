@@ -13,6 +13,7 @@ export type MainTabParamList = {
 
 export type AttendanceStackParamList = {
   AttendanceHome: undefined;
+  Workers: undefined;
 };
 
 export type LivestockStackParamList = {
@@ -32,4 +33,5 @@ export interface CurrentUser {
   farmId: number;
   farmName: string;
   userName: string;
+  role: string;
 }

@@ -11,6 +11,8 @@ interface Props {
   errors: FieldErrors<LivestockFormValues>;
   watch: UseFormWatch<LivestockFormValues>;
   isSubmitted: boolean;
+  note: string;
+  onNoteChange: (category: string, note: string) => void;
 }
 
 function toTitle(s: string) {
@@ -22,7 +24,9 @@ function parseCount(val: string | undefined): number {
   return isNaN(n) || n < 0 ? 0 : n;
 }
 
-export default function LivestockSection({ category, types, control, errors, watch, isSubmitted }: Props) {
+export default function LivestockSection({
+  category, types, control, errors, watch, isSubmitted, note, onNoteChange,
+}: Props) {
   const values = watch();
   const total = types.reduce((sum, t) => sum + parseCount(values[`count_${t.id}`]), 0);
 
@@ -79,6 +83,20 @@ export default function LivestockSection({ category, types, control, errors, wat
         <Text style={styles.totalLabel}>Total</Text>
         <Text style={styles.totalValue}>{total}</Text>
       </View>
+
+      <View style={styles.noteRow}>
+        <Text style={styles.noteLabel}>Comment</Text>
+        <TextInput
+          style={[styles.noteInput, isSubmitted && styles.noteInputDisabled]}
+          value={note}
+          onChangeText={(t) => onNoteChange(category, t)}
+          placeholder={`Notes for ${toTitle(category)} section (optional)`}
+          placeholderTextColor="#bbb"
+          multiline
+          editable={!isSubmitted}
+          maxLength={500}
+        />
+      </View>
     </View>
   );
 }
@@ -134,7 +152,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     backgroundColor: '#f7faf9',
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
   },
   totalLabel: { flex: 1, fontSize: 15, fontWeight: '700', color: '#2d6a4f' },
   totalValue: { width: 80, fontSize: 15, fontWeight: '700', color: '#2d6a4f', textAlign: 'center' },
+  noteRow: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+  },
+  noteLabel: { fontSize: 12, fontWeight: '600', color: '#888', marginBottom: 4 },
+  noteInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    padding: 8,
+    fontSize: 14,
+    color: '#1a1a1a',
+    backgroundColor: '#fafafa',
+    minHeight: 48,
+    textAlignVertical: 'top',
+  },
+  noteInputDisabled: { backgroundColor: '#f5f5f5', borderColor: '#ebebeb', color: '#bbb' },
 });

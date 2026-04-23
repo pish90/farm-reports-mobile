@@ -1,4 +1,5 @@
 import { AppState, AppStateStatus } from 'react-native';
+import { getDb } from '../db/database';
 import {
   SyncQueueEntry,
   getFullReport,
@@ -67,15 +68,41 @@ async function syncSection(
       })));
       break;
 
-    case 'expenses':
+    case 'expenses': {
       await apiClient.put(`/reports/${serverReportId}/expenses`, full.expenses.map((e) => ({
         entryNo: e.entry_no,
         date: e.date,
         supplierContractor: e.supplier_contractor ?? null,
-        refNo: e.ref_no ?? null,
+        receiptNo: e.receipt_no ?? null,
         cost: e.cost,
+        description: e.description ?? null,
+        categoryId: e.category_id ?? null,
+        businessUnitId: e.business_unit_id ?? null,
       })));
       break;
+    }
+
+    case 'attendance-notes': {
+      const notes = await getDb().getAllAsync<{ worker_id: number; note: string }>(
+        'SELECT worker_id, note FROM local_attendance_notes WHERE report_id = ?',
+        [localReportId],
+      );
+      await apiClient.put(`/reports/${serverReportId}/attendance-notes`, {
+        notes: notes.map((n) => ({ subjectId: n.worker_id, note: n.note })),
+      });
+      break;
+    }
+
+    case 'livestock-notes': {
+      const notes = await getDb().getAllAsync<{ category: string; note: string }>(
+        'SELECT category, note FROM local_livestock_notes WHERE report_id = ?',
+        [localReportId],
+      );
+      await apiClient.put(`/reports/${serverReportId}/livestock-notes`, {
+        notes: notes.map((n) => ({ subjectId: 0, subjectKey: n.category, note: n.note })),
+      });
+      break;
+    }
 
     case 'submit':
       await apiClient.post(`/reports/${serverReportId}/submit`, {});

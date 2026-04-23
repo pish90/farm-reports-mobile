@@ -39,3 +39,12 @@ export async function getWorkers(farmId: number): Promise<WorkerDto[]> {
     throw new Error('No workers available. Please connect to the internet and try again.');
   }
 }
+
+export async function addWorker(farmId: number, name: string): Promise<WorkerDto> {
+  const res = await apiClient.post(`/farms/${farmId}/workers`, { name });
+  return res.data.data as WorkerDto;
+}
+
+export async function deactivateWorker(farmId: number, workerId: number): Promise<void> {
+  await apiClient.delete(`/farms/${farmId}/workers/${workerId}`);
+}

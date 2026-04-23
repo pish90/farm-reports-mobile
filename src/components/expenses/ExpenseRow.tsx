@@ -51,8 +51,13 @@ export default function ExpenseRow({ expense, onEdit, onDelete }: Props) {
           <Text style={styles.supplier} numberOfLines={1}>
             {expense.supplier_contractor || '—'}
           </Text>
+          {expense.description ? (
+            <Text style={styles.description} numberOfLines={1}>{expense.description}</Text>
+          ) : null}
           <Text style={styles.meta} numberOfLines={1}>
-            {formatDate(expense.date)}  ·  Ref: {expense.ref_no || '—'}
+            {formatDate(expense.date)}
+            {expense.category_name ? `  ·  ${expense.category_name}` : ''}
+            {expense.business_unit_name ? `  ·  ${expense.business_unit_name}` : ''}
           </Text>
         </View>
 
@@ -90,8 +95,9 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   body: { flex: 1 },
-  supplier: { fontSize: 15, fontWeight: '600', color: '#1a1a1a' },
-  meta: { fontSize: 12, color: '#888', marginTop: 2 },
+  supplier:    { fontSize: 15, fontWeight: '600', color: '#1a1a1a' },
+  description: { fontSize: 13, color: '#555', marginTop: 1 },
+  meta:        { fontSize: 12, color: '#888', marginTop: 2 },
   cost: {
     fontSize: 15,
     fontWeight: '700',

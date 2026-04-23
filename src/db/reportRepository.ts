@@ -53,8 +53,37 @@ export interface LocalExpenseRecord {
   entry_no: number;
   date: string;
   supplier_contractor: string | null;
-  ref_no: string | null;
+  receipt_no: string | null;
   cost: number;
+  description: string | null;
+  category_id: number | null;
+  category_code: string | null;
+  category_name: string | null;
+  business_unit_id: number | null;
+  business_unit_code: string | null;
+  business_unit_name: string | null;
+}
+
+export interface LocalExpenseApportionment {
+  id: number;
+  expense_local_id: number;
+  business_unit_id: number;
+  business_unit_code: string;
+  business_unit_name: string;
+  percentage: number;
+  amount: number;
+}
+
+export interface LocalAttendanceNote {
+  report_id: number;
+  worker_id: number;
+  note: string;
+}
+
+export interface LocalLivestockNote {
+  report_id: number;
+  category: string;
+  note: string;
 }
 
 export interface SyncQueueEntry {
@@ -77,7 +106,15 @@ export interface FullReport {
 export type AttendanceInput = Omit<LocalAttendanceRecord, 'id' | 'report_id'>;
 export type LivestockInput  = Omit<LocalLivestockRecord,  'id' | 'report_id'>;
 export type MilkInput       = Omit<LocalMilkRecord,       'id' | 'report_id'>;
-export type ExpenseInput    = Omit<LocalExpenseRecord,    'id' | 'report_id'>;
+export type ExpenseInput    = Omit<LocalExpenseRecord, 'id' | 'report_id'> & {
+  apportionments?: Array<{
+    business_unit_id: number;
+    business_unit_code: string;
+    business_unit_name: string;
+    percentage: number;
+    amount: number;
+  }>;
+};
 
 // ─── Reports ─────────────────────────────────────────────────────────────────
 
@@ -105,6 +142,8 @@ export async function getOrCreateLocalReport(
     server_report_id: null,
     status: 'draft',
     last_synced_at: null,
+    submitted_at: null,
+    submitted_by: null,
   };
 }
 
@@ -200,12 +239,66 @@ export async function saveExpenses(
   await db.withTransactionAsync(async () => {
     await db.runAsync('DELETE FROM local_expenses WHERE report_id = ?', [reportId]);
     for (const r of records) {
-      await db.runAsync(
+      const result = await db.runAsync(
         `INSERT INTO local_expenses
-           (report_id, entry_no, date, supplier_contractor, ref_no, cost)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [reportId, r.entry_no, r.date, r.supplier_contractor ?? null, r.ref_no ?? null, r.cost],
+           (report_id, entry_no, date, supplier_contractor, receipt_no, cost,
+            description, category_id, category_code, category_name,
+            business_unit_id, business_unit_code, business_unit_name)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          reportId, r.entry_no, r.date,
+          r.supplier_contractor ?? null, r.receipt_no ?? null, r.cost,
+          r.description ?? null,
+          r.category_id ?? null, r.category_code ?? null, r.category_name ?? null,
+          r.business_unit_id ?? null, r.business_unit_code ?? null, r.business_unit_name ?? null,
+        ],
       );
+      if (r.apportionments && r.apportionments.length > 0) {
+        for (const ap of r.apportionments) {
+          await db.runAsync(
+            `INSERT INTO local_expense_apportionments
+               (expense_local_id, business_unit_id, business_unit_code, business_unit_name, percentage, amount)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [result.lastInsertRowId, ap.business_unit_id, ap.business_unit_code, ap.business_unit_name, ap.percentage, ap.amount],
+          );
+        }
+      }
+    }
+  });
+}
+
+export async function saveAttendanceNotes(
+  reportId: number,
+  notes: Array<{ worker_id: number; note: string }>,
+): Promise<void> {
+  const db = getDb();
+  await db.withTransactionAsync(async () => {
+    await db.runAsync('DELETE FROM local_attendance_notes WHERE report_id = ?', [reportId]);
+    for (const n of notes) {
+      if (n.note.trim()) {
+        await db.runAsync(
+          'INSERT OR REPLACE INTO local_attendance_notes (report_id, worker_id, note) VALUES (?, ?, ?)',
+          [reportId, n.worker_id, n.note.trim()],
+        );
+      }
+    }
+  });
+}
+
+export async function saveLivestockNotes(
+  reportId: number,
+  notes: Array<{ category: string; note: string }>,
+): Promise<void> {
+  const db = getDb();
+  await db.withTransactionAsync(async () => {
+    await db.runAsync('DELETE FROM local_livestock_notes WHERE report_id = ?', [reportId]);
+    for (const n of notes) {
+      if (n.note.trim()) {
+        await db.runAsync(
+          'INSERT OR REPLACE INTO local_livestock_notes (report_id, category, note) VALUES (?, ?, ?)',
+          [reportId, n.category, n.note.trim()],
+        );
+      }
     }
   });
 }
@@ -253,6 +346,15 @@ export async function updateReportSubmitted(
      SET status = 'submitted', submitted_at = datetime('now'), submitted_by = ?
      WHERE id = ?`,
     [submittedBy, reportId],
+  );
+}
+
+export async function updateReportDraft(reportId: number): Promise<void> {
+  await getDb().runAsync(
+    `UPDATE local_reports
+     SET status = 'draft', submitted_at = NULL, submitted_by = NULL
+     WHERE id = ?`,
+    [reportId],
   );
 }
 

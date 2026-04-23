@@ -61,8 +61,53 @@ export async function initDatabase(): Promise<void> {
       entry_no            INTEGER NOT NULL,
       date                TEXT    NOT NULL,
       supplier_contractor TEXT,
-      ref_no              TEXT,
-      cost                REAL    NOT NULL
+      receipt_no          TEXT,
+      cost                REAL    NOT NULL,
+      description         TEXT,
+      category_id         INTEGER,
+      category_code       TEXT,
+      category_name       TEXT,
+      business_unit_id    INTEGER,
+      business_unit_code  TEXT,
+      business_unit_name  TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS local_expense_apportionments (
+      id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+      expense_local_id   INTEGER NOT NULL,
+      business_unit_id   INTEGER NOT NULL,
+      business_unit_code TEXT    NOT NULL,
+      business_unit_name TEXT    NOT NULL,
+      percentage         REAL    NOT NULL,
+      amount             REAL    NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS local_attendance_notes (
+      id        INTEGER PRIMARY KEY AUTOINCREMENT,
+      report_id INTEGER NOT NULL,
+      worker_id INTEGER NOT NULL,
+      note      TEXT    NOT NULL,
+      UNIQUE (report_id, worker_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS local_livestock_notes (
+      id        INTEGER PRIMARY KEY AUTOINCREMENT,
+      report_id INTEGER NOT NULL,
+      category  TEXT    NOT NULL,
+      note      TEXT    NOT NULL,
+      UNIQUE (report_id, category)
+    );
+
+    CREATE TABLE IF NOT EXISTS expense_categories_cache (
+      id           INTEGER PRIMARY KEY,
+      account_code TEXT NOT NULL,
+      account_name TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS business_units_cache (
+      id   INTEGER PRIMARY KEY,
+      code TEXT NOT NULL,
+      name TEXT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS sync_queue (
@@ -89,10 +134,19 @@ export async function initDatabase(): Promise<void> {
     );
   `);
 
-  // Migration: add submitted columns for existing installs (no-op on fresh install)
-  for (const col of ['submitted_at TEXT', 'submitted_by TEXT']) {
-    try {
-      await db.execAsync(`ALTER TABLE local_reports ADD COLUMN ${col};`);
-    } catch {}
+  const migrations = [
+    'ALTER TABLE local_reports ADD COLUMN submitted_at TEXT',
+    'ALTER TABLE local_reports ADD COLUMN submitted_by TEXT',
+    'ALTER TABLE local_expenses ADD COLUMN receipt_no TEXT',
+    'ALTER TABLE local_expenses ADD COLUMN description TEXT',
+    'ALTER TABLE local_expenses ADD COLUMN category_id INTEGER',
+    'ALTER TABLE local_expenses ADD COLUMN category_code TEXT',
+    'ALTER TABLE local_expenses ADD COLUMN category_name TEXT',
+    'ALTER TABLE local_expenses ADD COLUMN business_unit_id INTEGER',
+    'ALTER TABLE local_expenses ADD COLUMN business_unit_code TEXT',
+    'ALTER TABLE local_expenses ADD COLUMN business_unit_name TEXT',
+  ];
+  for (const sql of migrations) {
+    try { await db.execAsync(`${sql};`); } catch {}
   }
 }
