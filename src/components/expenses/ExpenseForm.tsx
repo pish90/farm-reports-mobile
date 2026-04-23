@@ -2,17 +2,15 @@ import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import {
   Keyboard,
-  KeyboardAvoidingView,
   Modal,
-  Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import {
   BusinessUnitDto,
   ExpenseCategoryDto,
@@ -206,17 +204,18 @@ export default function ExpenseForm({ visible, year, month, initial, isEditing, 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
       <Pressable style={styles.backdrop} onPress={onCancel} />
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.kvWrap}
-        pointerEvents="box-none"
-      >
+      <View style={styles.kvWrap} pointerEvents="box-none">
         <View style={styles.sheet}>
           <View style={styles.handle} />
           <Text style={styles.title}>{isEditing ? 'Edit Expense' : 'New Expense'}</Text>
           <Text style={styles.monthLabel}>{MONTHS[month - 1]} {year}</Text>
 
-          <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          <KeyboardAwareScrollView
+            keyboardShouldPersistTaps="handled"
+            enableOnAndroid
+            extraScrollHeight={24}
+            showsVerticalScrollIndicator={false}
+          >
             {/* Day */}
             <Text style={styles.label}>Day *</Text>
             <Controller
@@ -364,7 +363,7 @@ export default function ExpenseForm({ visible, year, month, initial, isEditing, 
             {errors.cost && <Text style={styles.errorText}>{errors.cost.message}</Text>}
 
             <View style={{ height: 8 }} />
-          </ScrollView>
+          </KeyboardAwareScrollView>
 
           <View style={styles.buttonRow}>
             <TouchableOpacity style={styles.cancelBtn} onPress={onCancel}>
@@ -375,7 +374,7 @@ export default function ExpenseForm({ visible, year, month, initial, isEditing, 
             </TouchableOpacity>
           </View>
         </View>
-      </KeyboardAvoidingView>
+      </View>
 
       {/* Pickers rendered inside the same Modal — fixes iOS sibling Modal touch bug */}
       {showCatPicker && (
