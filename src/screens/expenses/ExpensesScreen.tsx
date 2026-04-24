@@ -1,9 +1,7 @@
 import { Feather } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   StyleSheet,
   Text,
@@ -27,7 +25,6 @@ import {
   getExpenseCategories,
 } from '../../services/lookupService';
 import { useAuth } from '../../store/AuthContext';
-import { scanReceipt } from '../../services/receiptService';
 
 function buildDate(year: number, month: number, day: number): string {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
@@ -48,6 +45,7 @@ function toFormValues(expense: LocalExpenseRecord): ExpenseFormValues {
     business_unit_code: expense.business_unit_code ?? null,
     business_unit_name: expense.business_unit_name ?? null,
     apportionments: [],
+    receipt_image_uri: expense.receipt_image_uri ?? null,
   };
 }
 
@@ -66,8 +64,6 @@ export default function ExpensesScreen() {
 
   const [formVisible,    setFormVisible]    = useState(false);
   const [editingExpense, setEditingExpense] = useState<LocalExpenseRecord | null>(null);
-  const [scannedInitial, setScannedInitial] = useState<ExpenseFormValues | undefined>(undefined);
-  const [isScanning,     setIsScanning]     = useState(false);
 
   const [categories,    setCategories]    = useState<ExpenseCategoryDto[]>([]);
   const [businessUnits, setBusinessUnits] = useState<BusinessUnitDto[]>([]);
@@ -116,6 +112,7 @@ export default function ExpensesScreen() {
       business_unit_id: e.business_unit_id,
       business_unit_code: e.business_unit_code,
       business_unit_name: e.business_unit_name,
+      receipt_image_uri: e.receipt_image_uri,
     }));
     await saveExpenses(reportId, inputs);
     await markSectionDirty(reportId, 'expenses');
@@ -135,64 +132,7 @@ export default function ExpensesScreen() {
 
   function openEdit(expense: LocalExpenseRecord) {
     setEditingExpense(expense);
-    setScannedInitial(undefined);
     setFormVisible(true);
-  }
-
-  async function openScan() {
-    Alert.alert('Scan Receipt', 'Choose an option', [
-      {
-        text: 'Take Photo',
-        onPress: () => launchScan('camera'),
-      },
-      {
-        text: 'Choose from Gallery',
-        onPress: () => launchScan('gallery'),
-      },
-      { text: 'Cancel', style: 'cancel' },
-    ]);
-  }
-
-  async function launchScan(source: 'camera' | 'gallery') {
-    const permission = source === 'camera'
-      ? await ImagePicker.requestCameraPermissionsAsync()
-      : await ImagePicker.requestMediaLibraryPermissionsAsync();
-
-    if (!permission.granted) {
-      Alert.alert('Permission required', 'Please allow access to continue.');
-      return;
-    }
-
-    const result = source === 'camera'
-      ? await ImagePicker.launchCameraAsync({ quality: 0.7, allowsEditing: true })
-      : await ImagePicker.launchImageLibraryAsync({ quality: 0.7, allowsEditing: true, mediaTypes: 'images' });
-
-    if (result.canceled || !result.assets[0]) return;
-
-    setIsScanning(true);
-    try {
-      const data = await scanReceipt(result.assets[0].uri);
-      const initial: ExpenseFormValues = {
-        day: data.day != null ? String(data.day) : '',
-        supplier_contractor: data.supplierContractor ?? '',
-        receipt_no: data.receiptNo ?? '',
-        cost: data.cost != null ? String(data.cost) : '',
-        description: data.description ?? '',
-        category_id: null, category_code: null, category_name: null,
-        business_unit_id: null, business_unit_code: null, business_unit_name: null,
-        apportionments: [],
-      };
-      setScannedInitial(initial);
-      setEditingExpense(null);
-      setFormVisible(true);
-    } catch {
-      Alert.alert('Scan failed', 'Could not read the receipt. You can enter details manually.');
-      setScannedInitial(undefined);
-      setEditingExpense(null);
-      setFormVisible(true);
-    } finally {
-      setIsScanning(false);
-    }
   }
 
   // ── Save ───────────────────────────────────────────────────────────────────
@@ -222,6 +162,7 @@ export default function ExpensesScreen() {
                 business_unit_id: values.business_unit_id,
                 business_unit_code: values.business_unit_code,
                 business_unit_name: values.business_unit_name,
+                receipt_image_uri: values.receipt_image_uri,
               }
             : e,
         );
@@ -243,6 +184,7 @@ export default function ExpensesScreen() {
             business_unit_id: values.business_unit_id,
             business_unit_code: values.business_unit_code,
             business_unit_name: values.business_unit_name,
+            receipt_image_uri: values.receipt_image_uri,
           },
         ];
       }
@@ -338,24 +280,11 @@ export default function ExpensesScreen() {
             keyboardShouldPersistTaps="handled"
           />
 
-          {/* Floating action buttons — hidden when submitted */}
+          {/* Floating action button — hidden when submitted */}
           {!isSubmitted && (
-            <>
-              <TouchableOpacity style={styles.fabScan} onPress={openScan} activeOpacity={0.85} disabled={isScanning}>
-                <Feather name="camera" size={24} color="#fff" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.fab} onPress={openAdd} activeOpacity={0.85}>
-                <Feather name="plus" size={28} color="#fff" />
-              </TouchableOpacity>
-            </>
-          )}
-
-          {/* Scanning overlay */}
-          {isScanning && (
-            <View style={styles.scanOverlay}>
-              <ActivityIndicator size="large" color="#fff" />
-              <Text style={styles.scanOverlayText}>Reading receipt…</Text>
-            </View>
+            <TouchableOpacity style={styles.fab} onPress={openAdd} activeOpacity={0.85}>
+              <Feather name="plus" size={28} color="#fff" />
+            </TouchableOpacity>
           )}
         </>
       )}
@@ -364,12 +293,12 @@ export default function ExpensesScreen() {
         visible={formVisible}
         year={year}
         month={month}
-        initial={scannedInitial ?? (editingExpense ? toFormValues(editingExpense) : undefined)}
-        isEditing={!!editingExpense && !scannedInitial}
+        initial={editingExpense ? toFormValues(editingExpense) : undefined}
+        isEditing={!!editingExpense}
         categories={categories}
         businessUnits={businessUnits}
         onSave={handleSave}
-        onCancel={() => { setFormVisible(false); setScannedInitial(undefined); }}
+        onCancel={() => setFormVisible(false)}
       />
     </View>
   );
@@ -427,33 +356,5 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.25,
     shadowRadius: 5,
-  },
-  fabScan: {
-    position: 'absolute',
-    bottom: 24,
-    right: 96,
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: '#40916c',
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 5,
-  },
-  scanOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 14,
-  },
-  scanOverlayText: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '600',
   },
 });

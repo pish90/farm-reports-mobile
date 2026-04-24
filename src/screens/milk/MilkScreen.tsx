@@ -320,6 +320,7 @@ export default function MilkScreen() {
           ListFooterComponent={ListFooter}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
+          automaticallyAdjustKeyboardInsets
         />
       )}
     </View>

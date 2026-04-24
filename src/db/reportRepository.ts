@@ -62,6 +62,7 @@ export interface LocalExpenseRecord {
   business_unit_id: number | null;
   business_unit_code: string | null;
   business_unit_name: string | null;
+  receipt_image_uri: string | null;
 }
 
 export interface LocalExpenseApportionment {
@@ -243,14 +244,15 @@ export async function saveExpenses(
         `INSERT INTO local_expenses
            (report_id, entry_no, date, supplier_contractor, receipt_no, cost,
             description, category_id, category_code, category_name,
-            business_unit_id, business_unit_code, business_unit_name)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            business_unit_id, business_unit_code, business_unit_name, receipt_image_uri)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           reportId, r.entry_no, r.date,
           r.supplier_contractor ?? null, r.receipt_no ?? null, r.cost,
           r.description ?? null,
           r.category_id ?? null, r.category_code ?? null, r.category_name ?? null,
           r.business_unit_id ?? null, r.business_unit_code ?? null, r.business_unit_name ?? null,
+          r.receipt_image_uri ?? null,
         ],
       );
       if (r.apportionments && r.apportionments.length > 0) {

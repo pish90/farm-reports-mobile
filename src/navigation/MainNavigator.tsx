@@ -3,10 +3,12 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { TouchableOpacity, View } from 'react-native';
 import SyncStatusBadge from '../components/shared/SyncStatusBadge';
+import AdminDashboardScreen from '../screens/AdminDashboardScreen';
 import AttendanceScreen from '../screens/AttendanceScreen';
 import ExpensesScreen from '../screens/expenses/ExpensesScreen';
 import LivestockScreen from '../screens/livestock/LivestockScreen';
 import MilkScreen from '../screens/milk/MilkScreen';
+import SettingsScreen from '../screens/SettingsScreen';
 import WorkersScreen from '../screens/WorkersScreen';
 import { useAuth } from '../store/AuthContext';
 import {
@@ -68,7 +70,8 @@ function ExpensesNavigator() {
 }
 
 export default function MainNavigator() {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'ADMIN';
 
   function openSummary() {
     if (navigationRef.isReady()) {
@@ -87,9 +90,6 @@ export default function MainNavigator() {
             <TouchableOpacity onPress={openSummary} style={{ padding: 4 }} hitSlop={8}>
               <Feather name="clipboard" size={20} color="#2d6a4f" />
             </TouchableOpacity>
-            <TouchableOpacity onPress={logout} style={{ padding: 4, marginLeft: 4 }} hitSlop={8}>
-              <Feather name="log-out" size={20} color="#e53e3e" />
-            </TouchableOpacity>
           </View>
         ),
         tabBarActiveTintColor: '#2d6a4f',
@@ -101,6 +101,8 @@ export default function MainNavigator() {
             Livestock:  'tag',
             Milk:       'droplet',
             Expenses:   'dollar-sign',
+            Admin:      'grid',
+            Settings:   'settings',
           };
           return <Feather name={icons[route.name]} size={size} color={color} />;
         },
@@ -110,6 +112,18 @@ export default function MainNavigator() {
       <Tab.Screen name="Livestock"  component={LivestockNavigator} />
       <Tab.Screen name="Milk"       component={MilkNavigator} />
       <Tab.Screen name="Expenses"   component={ExpensesNavigator} />
+      {isAdmin && (
+        <Tab.Screen
+          name="Admin"
+          component={AdminDashboardScreen}
+          options={{ headerTitle: 'Farm Overview' }}
+        />
+      )}
+      <Tab.Screen
+        name="Settings"
+        component={SettingsScreen}
+        options={{ headerTitle: 'Settings' }}
+      />
     </Tab.Navigator>
   );
 }

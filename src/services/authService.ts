@@ -47,6 +47,14 @@ export const authService = {
     };
   },
 
+  async changePassword(currentPassword: string, newPassword: string): Promise<void> {
+    const token = await AsyncStorage.getItem(TOKEN_KEY);
+    await axios.put(`${API_URL}/auth/password`,
+      { currentPassword, newPassword },
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+  },
+
   async isAuthenticated(): Promise<boolean> {
     const token = await AsyncStorage.getItem(TOKEN_KEY);
     if (!token) return false;

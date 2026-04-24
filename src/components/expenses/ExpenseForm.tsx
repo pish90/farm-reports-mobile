@@ -1,16 +1,20 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Feather } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import {
+  Image,
   Keyboard,
+  KeyboardAvoidingView,
   Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
-import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import {
   BusinessUnitDto,
   ExpenseCategoryDto,
@@ -47,6 +51,7 @@ export interface ExpenseFormValues {
   business_unit_code: string | null;
   business_unit_name: string | null;
   apportionments: ApportionmentValue[];
+  receipt_image_uri: string | null;
 }
 
 const EMPTY: ExpenseFormValues = {
@@ -54,6 +59,7 @@ const EMPTY: ExpenseFormValues = {
   category_id: null, category_code: null, category_name: null,
   business_unit_id: null, business_unit_code: null, business_unit_name: null,
   apportionments: [],
+  receipt_image_uri: null,
 };
 
 interface Props {
@@ -132,6 +138,7 @@ function Dropdown<T>({ title, items, getKey, getLabel, onSelect, onClose }: Drop
 
 export default function ExpenseForm({ visible, year, month, initial, isEditing, categories, businessUnits, onSave, onCancel }: Props) {
   const daysInMonth = getDaysInMonth(year, month);
+  const scrollRef = useRef<ScrollView>(null);
 
   const [showCatPicker, setShowCatPicker] = useState(false);
   const [showBuPicker,  setShowBuPicker]  = useState(false);
@@ -148,6 +155,7 @@ export default function ExpenseForm({ visible, year, month, initial, isEditing, 
   const watchedBuCode = useWatch({ control, name: 'business_unit_code' });
   const watchedBuName = useWatch({ control, name: 'business_unit_name' });
   const watchedApportionments = useWatch({ control, name: 'apportionments' });
+  const watchedReceiptUri = useWatch({ control, name: 'receipt_image_uri' });
 
   const isShared = useMemo(() => {
     return watchedBuId != null &&
@@ -201,20 +209,43 @@ export default function ExpenseForm({ visible, year, month, initial, isEditing, 
   const pctWarning = isShared && (watchedApportionments ?? []).length > 0 &&
     Math.abs(totalApportionedPct - 100) > 0.01;
 
+  async function pickReceipt(source: 'camera' | 'gallery') {
+    const perm = source === 'camera'
+      ? await ImagePicker.requestCameraPermissionsAsync()
+      : await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) return;
+    const result = source === 'camera'
+      ? await ImagePicker.launchCameraAsync({ quality: 0.7, allowsEditing: true })
+      : await ImagePicker.launchImageLibraryAsync({ quality: 0.7, allowsEditing: true, mediaTypes: 'images' });
+    if (!result.canceled && result.assets[0]) {
+      setValue('receipt_image_uri', result.assets[0].uri);
+    }
+  }
+
+  const anyPickerOpen = showCatPicker || showBuPicker || showApportBuPicker !== null;
+
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
-      <Pressable style={styles.backdrop} onPress={onCancel} />
-      <View style={styles.kvWrap} pointerEvents="box-none">
+      <Pressable
+        style={styles.backdrop}
+        onPress={onCancel}
+        pointerEvents={anyPickerOpen ? 'none' : 'auto'}
+      />
+      <KeyboardAvoidingView
+        behavior="padding"
+        style={styles.kvWrap}
+        pointerEvents="box-none"
+      >
         <View style={styles.sheet}>
           <View style={styles.handle} />
           <Text style={styles.title}>{isEditing ? 'Edit Expense' : 'New Expense'}</Text>
           <Text style={styles.monthLabel}>{MONTHS[month - 1]} {year}</Text>
 
-          <KeyboardAwareScrollView
+          <ScrollView
+            ref={scrollRef}
             keyboardShouldPersistTaps="handled"
-            enableOnAndroid
-            extraScrollHeight={24}
             showsVerticalScrollIndicator={false}
+            automaticallyAdjustKeyboardInsets
           >
             {/* Day */}
             <Text style={styles.label}>Day *</Text>
@@ -295,10 +326,36 @@ export default function ExpenseForm({ visible, year, month, initial, isEditing, 
               placeholder="Select business unit"
             />
 
+            {/* Amount */}
+            <Text style={styles.label}>Amount (Ksh) *</Text>
+            <Controller
+              control={control} name="cost"
+              rules={{ required: 'Required', validate: (v) => {
+                const n = parseFloat(v);
+                return (!isNaN(n) && n > 0) || 'Must be greater than 0';
+              }}}
+              render={({ field: { onChange, onBlur, value } }) => (
+                <TextInput
+                  style={[styles.input, !!errors.cost && styles.inputError]}
+                  value={value} onChangeText={onChange} onBlur={onBlur}
+                  keyboardType="decimal-pad" placeholder="0.00"
+                  placeholderTextColor="#bbb" maxLength={12} selectTextOnFocus
+                />
+              )}
+            />
+            {errors.cost && <Text style={styles.errorText}>{errors.cost.message}</Text>}
+
             {/* CC-900 Apportionment */}
             {isShared && (
               <View style={styles.apportionBox}>
-                <Text style={styles.apportionTitle}>Cost Apportionment</Text>
+                <View style={styles.apportionHeader}>
+                  <Text style={styles.apportionTitle}>Cost Apportionment</Text>
+                  {watchedCost ? (
+                    <Text style={styles.apportionTotalAmt}>
+                      Total: Ksh {parseFloat(watchedCost).toLocaleString('en-KE', { minimumFractionDigits: 2 })}
+                    </Text>
+                  ) : null}
+                </View>
                 {(watchedApportionments ?? []).map((ap, idx) => (
                   <View key={idx} style={styles.apportionRow}>
                     <TouchableOpacity
@@ -343,27 +400,34 @@ export default function ExpenseForm({ visible, year, month, initial, isEditing, 
               </View>
             )}
 
-            {/* Amount */}
-            <Text style={styles.label}>Amount (Ksh) *</Text>
-            <Controller
-              control={control} name="cost"
-              rules={{ required: 'Required', validate: (v) => {
-                const n = parseFloat(v);
-                return (!isNaN(n) && n > 0) || 'Must be greater than 0';
-              }}}
-              render={({ field: { onChange, onBlur, value } }) => (
-                <TextInput
-                  style={[styles.input, !!errors.cost && styles.inputError]}
-                  value={value} onChangeText={onChange} onBlur={onBlur}
-                  keyboardType="decimal-pad" placeholder="0.00"
-                  placeholderTextColor="#bbb" maxLength={12} selectTextOnFocus
-                />
-              )}
-            />
-            {errors.cost && <Text style={styles.errorText}>{errors.cost.message}</Text>}
+            {/* Receipt Photo */}
+            <Text style={styles.label}>Receipt Photo</Text>
+            {watchedReceiptUri ? (
+              <View style={styles.receiptPreview}>
+                <Image source={{ uri: watchedReceiptUri }} style={styles.receiptThumb} />
+                <TouchableOpacity
+                  style={styles.receiptRemoveBtn}
+                  onPress={() => setValue('receipt_image_uri', null)}
+                  hitSlop={8}
+                >
+                  <Feather name="x" size={14} color="#fff" />
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={styles.receiptBtnRow}>
+                <TouchableOpacity style={styles.receiptBtn} onPress={() => pickReceipt('camera')} activeOpacity={0.7}>
+                  <Feather name="camera" size={16} color="#2d6a4f" />
+                  <Text style={styles.receiptBtnText}>Camera</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.receiptBtn} onPress={() => pickReceipt('gallery')} activeOpacity={0.7}>
+                  <Feather name="image" size={16} color="#2d6a4f" />
+                  <Text style={styles.receiptBtnText}>Gallery</Text>
+                </TouchableOpacity>
+              </View>
+            )}
 
             <View style={{ height: 8 }} />
-          </KeyboardAwareScrollView>
+          </ScrollView>
 
           <View style={styles.buttonRow}>
             <TouchableOpacity style={styles.cancelBtn} onPress={onCancel}>
@@ -374,7 +438,7 @@ export default function ExpenseForm({ visible, year, month, initial, isEditing, 
             </TouchableOpacity>
           </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
 
       {/* Pickers rendered inside the same Modal — fixes iOS sibling Modal touch bug */}
       {showCatPicker && (
@@ -470,9 +534,15 @@ const styles = StyleSheet.create({
     marginTop: 14, borderWidth: 1, borderColor: '#d0e8db', borderRadius: 8,
     backgroundColor: '#f7faf9', overflow: 'hidden',
   },
+  apportionHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 12, paddingTop: 10, paddingBottom: 6,
+  },
   apportionTitle: {
     fontSize: 13, fontWeight: '600', color: '#2d6a4f',
-    paddingHorizontal: 12, paddingTop: 10, paddingBottom: 6,
+  },
+  apportionTotalAmt: {
+    fontSize: 12, fontWeight: '600', color: '#2d6a4f',
   },
   apportionRow: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
@@ -527,4 +597,19 @@ const styles = StyleSheet.create({
     paddingVertical: 13, alignItems: 'center',
   },
   saveText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+
+  receiptBtnRow: { flexDirection: 'row', gap: 10 },
+  receiptBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    borderWidth: 1, borderColor: '#d0e8db', borderRadius: 8, borderStyle: 'dashed',
+    paddingVertical: 12, backgroundColor: '#f7faf9',
+  },
+  receiptBtnText: { fontSize: 14, fontWeight: '600', color: '#2d6a4f' },
+  receiptPreview: { position: 'relative', alignSelf: 'flex-start' },
+  receiptThumb: { width: 100, height: 100, borderRadius: 8, backgroundColor: '#eee' },
+  receiptRemoveBtn: {
+    position: 'absolute', top: -6, right: -6,
+    width: 22, height: 22, borderRadius: 11,
+    backgroundColor: '#e53e3e', alignItems: 'center', justifyContent: 'center',
+  },
 });

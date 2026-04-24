@@ -9,7 +9,24 @@ export type MainTabParamList = {
   Livestock: undefined;
   Milk: undefined;
   Expenses: undefined;
+  Admin: undefined;
+  Settings: undefined;
 };
+
+export interface FarmLiveStatus {
+  farmId: number;
+  farmName: string;
+  year: number;
+  month: number;
+  reportStatus: 'NOT_STARTED' | 'DRAFT' | 'SUBMITTED';
+  reportId: number | null;
+  activeWorkers: number;
+  attendanceDaysRecorded: number;
+  milkTotalLitres: number;
+  expenseCount: number;
+  expenseTotal: number;
+  livestockEntered: boolean;
+}
 
 export type AttendanceStackParamList = {
   AttendanceHome: undefined;

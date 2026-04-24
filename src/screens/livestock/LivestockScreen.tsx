@@ -201,6 +201,7 @@ export default function LivestockScreen() {
         <ScrollView
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
+          automaticallyAdjustKeyboardInsets
         >
           {isSubmitted && (
             <View style={styles.submittedBanner}>

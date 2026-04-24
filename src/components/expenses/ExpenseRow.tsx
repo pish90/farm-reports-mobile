@@ -61,6 +61,9 @@ export default function ExpenseRow({ expense, onEdit, onDelete }: Props) {
           </Text>
         </View>
 
+        {expense.receipt_image_uri ? (
+          <Feather name="camera" size={14} color="#52B788" style={styles.receiptIcon} />
+        ) : null}
         <Text style={styles.cost}>{expense.cost.toFixed(2)}</Text>
         <Feather name="chevron-right" size={16} color="#ccc" style={styles.chevron} />
       </TouchableOpacity>
@@ -105,6 +108,7 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
     marginLeft: 8,
   },
+  receiptIcon: { marginLeft: 6 },
   chevron: { marginLeft: 4 },
   deleteAction: {
     width: 80,
