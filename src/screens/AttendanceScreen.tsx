@@ -45,74 +45,10 @@ function getFirstDayOfWeek(year: number, month: number): number {
   return new Date(year, month - 1, 1).getDay();
 }
 
-// ─── Daily Register: day picker ───────────────────────────────────────────────
+// ─── Daily Register: calendar + worker list in one modal ─────────────────────
 
-interface DayPickerProps {
+interface DailyRegisterProps {
   visible: boolean;
-  year: number;
-  month: number;
-  markedDays: Set<number>;
-  onSelect: (day: number) => void;
-  onClose: () => void;
-}
-
-function DayPickerModal({ visible, year, month, markedDays, onSelect, onClose }: DayPickerProps) {
-  const daysInMonth    = getDaysInMonth(year, month);
-  const firstDow       = getFirstDayOfWeek(year, month);
-  const todayDay       = new Date().getDate();
-  const isCurrentMonth = new Date().getFullYear() === year && new Date().getMonth() + 1 === month;
-
-  const cells: Array<number | null> = [
-    ...Array.from({ length: firstDow }, () => null),
-    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
-  ];
-
-  return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose} />
-      <View style={styles.pickerSheet}>
-        <View style={styles.handle} />
-        <Text style={styles.sheetTitle}>Daily Register — {MONTHS[month - 1]} {year}</Text>
-        <Text style={styles.sheetSubtitle}>Select a day to mark attendance for all workers</Text>
-
-        <View style={styles.dowRow}>
-          {DAY_LABELS.map(l => <Text key={l} style={styles.dowLabel}>{l}</Text>)}
-        </View>
-
-        <View style={styles.calGrid}>
-          {cells.map((day, idx) => {
-            if (!day) return <View key={`e-${idx}`} style={styles.calCell} />;
-            const marked  = markedDays.has(day);
-            const isToday = isCurrentMonth && day === todayDay;
-            return (
-              <TouchableOpacity
-                key={day}
-                style={[styles.calCell, styles.calDayBtn, marked && styles.calDayMarked, isToday && !marked && styles.calDayToday]}
-                onPress={() => { onSelect(day); onClose(); }}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.calDayNum, marked && styles.calDayNumMarked, isToday && !marked && styles.calDayNumToday]}>
-                  {day}
-                </Text>
-                {marked && <View style={styles.calDot} />}
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
-          <Text style={styles.closeBtnText}>Close</Text>
-        </TouchableOpacity>
-      </View>
-    </Modal>
-  );
-}
-
-// ─── Daily Register: worker list for a day ────────────────────────────────────
-
-interface DayAttendanceProps {
-  visible: boolean;
-  day: number;
   year: number;
   month: number;
   workers: WorkerDto[];
@@ -122,25 +58,83 @@ interface DayAttendanceProps {
   onClose: () => void;
 }
 
-function DayAttendanceModal({ visible, day, year, month, workers, grid, isSubmitted, onToggle, onClose }: DayAttendanceProps) {
-  const dayName = new Date(year, month - 1, day).toLocaleDateString('en-GB', { weekday: 'long' });
+function DailyRegisterModal({ visible, year, month, workers, grid, isSubmitted, onToggle, onClose }: DailyRegisterProps) {
+  const daysInMonth    = getDaysInMonth(year, month);
+  const firstDow       = getFirstDayOfWeek(year, month);
+  const todayDay       = new Date().getDate();
+  const isCurrentMonth = new Date().getFullYear() === year && new Date().getMonth() + 1 === month;
+
+  const [selectedDay, setSelectedDay] = useState(() => isCurrentMonth ? todayDay : 1);
+
+  useEffect(() => {
+    if (visible) setSelectedDay(isCurrentMonth ? todayDay : 1);
+  }, [visible]);
+
+  const cells: Array<number | null> = [
+    ...Array.from({ length: firstDow }, () => null),
+    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+  ];
+
+  const dayName = new Date(year, month - 1, selectedDay).toLocaleDateString('en-GB', { weekday: 'long' });
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose} />
-      <View style={styles.attSheet}>
+      <View style={styles.dailySheet}>
         <View style={styles.handle} />
-        <Text style={styles.sheetTitle}>{dayName}, {day} {MONTHS[month - 1]}</Text>
-        <Text style={styles.sheetSubtitle}>Tap a name to toggle Present / Absent</Text>
+        <Text style={styles.sheetTitle}>Daily Register — {MONTHS[month - 1]} {year}</Text>
 
+        {/* Calendar: tap any day to switch the worker list below */}
+        <View style={styles.dowRow}>
+          {DAY_LABELS.map(l => <Text key={l} style={styles.dowLabel}>{l}</Text>)}
+        </View>
+        <View style={styles.calGrid}>
+          {cells.map((day, idx) => {
+            if (!day) return <View key={`e-${idx}`} style={styles.calCell} />;
+            const hasAtt    = workers.some(w => grid[gridKey(w.id, day)]);
+            const isSelected = day === selectedDay;
+            const isToday    = isCurrentMonth && day === todayDay;
+            return (
+              <TouchableOpacity
+                key={day}
+                style={[
+                  styles.calCell, styles.calDayBtn,
+                  isSelected && styles.calDaySelected,
+                  !isSelected && hasAtt    && styles.calDayMarked,
+                  !isSelected && isToday   && styles.calDayToday,
+                ]}
+                onPress={() => setSelectedDay(day)}
+                activeOpacity={0.7}
+              >
+                <Text style={[
+                  styles.calDayNum,
+                  isSelected              && styles.calDayNumSelected,
+                  !isSelected && hasAtt   && styles.calDayNumMarked,
+                  !isSelected && isToday  && styles.calDayNumToday,
+                ]}>
+                  {day}
+                </Text>
+                {hasAtt && !isSelected && <View style={styles.calDot} />}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {/* Selected day header */}
+        <Text style={styles.selectedDayLabel}>{dayName}, {selectedDay} {MONTHS[month - 1]}</Text>
+        {!isSubmitted && (
+          <Text style={styles.sheetSubtitle}>Tap a name to toggle Present / Absent</Text>
+        )}
+
+        {/* Worker list for the selected day */}
         <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           {workers.map(worker => {
-            const present = grid[gridKey(worker.id, day)] ?? false;
+            const present = grid[gridKey(worker.id, selectedDay)] ?? false;
             return (
               <TouchableOpacity
                 key={worker.id}
                 style={[styles.attRow, present && styles.attRowPresent]}
-                onPress={() => { if (!isSubmitted) onToggle(worker.id, day); }}
+                onPress={() => { if (!isSubmitted) onToggle(worker.id, selectedDay); }}
                 activeOpacity={0.75}
                 disabled={isSubmitted}
               >
@@ -307,9 +301,7 @@ export default function AttendanceScreen() {
   const [loadError,     setLoadError]     = useState<string | null>(null);
   const [saveState,     setSaveState]     = useState<SaveState>('idle');
 
-  const [showDayPicker,     setShowDayPicker]     = useState(false);
-  const [showDayAttendance, setShowDayAttendance] = useState(false);
-  const [selectedDay,       setSelectedDay]       = useState(1);
+  const [showDailyRegister, setShowDailyRegister] = useState(false);
 
   const debounceRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -416,12 +408,6 @@ export default function AttendanceScreen() {
   const daysInMonth = getDaysInMonth(year, month);
   const firstDow    = getFirstDayOfWeek(year, month);
 
-  // Days with any attendance recorded — highlights the day picker calendar
-  const markedDays = new Set<number>();
-  for (let d = 1; d <= daysInMonth; d++) {
-    if (workers.some(w => grid[gridKey(w.id, d)])) markedDays.add(d);
-  }
-
   return (
     <View style={styles.container}>
       <MonthYearSelector year={year} month={month} onChange={(y, m) => { setYear(y); setMonth(m); }} />
@@ -488,31 +474,21 @@ export default function AttendanceScreen() {
 
       {/* Daily Register FAB */}
       {isLoaded && !isSubmitted && workers.length > 0 && (
-        <TouchableOpacity style={styles.fab} onPress={() => setShowDayPicker(true)} activeOpacity={0.85}>
+        <TouchableOpacity style={styles.fab} onPress={() => setShowDailyRegister(true)} activeOpacity={0.85}>
           <Feather name="calendar" size={22} color="#fff" />
           <Text style={styles.fabLabel}>Daily Register</Text>
         </TouchableOpacity>
       )}
 
-      <DayPickerModal
-        visible={showDayPicker}
-        year={year}
-        month={month}
-        markedDays={markedDays}
-        onSelect={day => { setSelectedDay(day); setShowDayAttendance(true); }}
-        onClose={() => setShowDayPicker(false)}
-      />
-
-      <DayAttendanceModal
-        visible={showDayAttendance}
-        day={selectedDay}
+      <DailyRegisterModal
+        visible={showDailyRegister}
         year={year}
         month={month}
         workers={workers}
         grid={grid}
         isSubmitted={isSubmitted}
         onToggle={handleToggle}
-        onClose={() => setShowDayAttendance(false)}
+        onClose={() => setShowDailyRegister(false)}
       />
     </View>
   );
@@ -590,21 +566,15 @@ const styles = StyleSheet.create({
   sheetTitle:    { fontSize: 16, fontWeight: '700', color: '#1a1a1a', textAlign: 'center', marginBottom: 4 },
   sheetSubtitle: { fontSize: 12, color: '#aaa', textAlign: 'center', marginBottom: 16 },
 
-  // Day picker sheet
-  pickerSheet: {
+  // Daily Register combined sheet
+  dailySheet: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
     backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20,
-    paddingHorizontal: 16, paddingBottom: 32,
+    paddingHorizontal: 16, paddingBottom: 32, maxHeight: '88%',
   },
-  closeBtn:     { marginTop: 16, paddingVertical: 13, borderRadius: 10, borderWidth: 1, borderColor: '#ddd', alignItems: 'center' },
-  closeBtnText: { fontSize: 15, fontWeight: '600', color: '#666' },
-
-  // Day attendance sheet
-  attSheet: {
-    position: 'absolute', bottom: 0, left: 0, right: 0,
-    backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20,
-    paddingHorizontal: 16, paddingBottom: 32, maxHeight: '75%',
-  },
+  calDaySelected:    { backgroundColor: '#1B4332' },
+  calDayNumSelected: { color: '#fff', fontWeight: '700' },
+  selectedDayLabel:  { fontSize: 15, fontWeight: '700', color: '#1a1a1a', marginTop: 12, marginBottom: 2 },
   attRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 8, paddingVertical: 13,
