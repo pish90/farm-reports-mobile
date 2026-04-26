@@ -87,26 +87,26 @@ function DayPickerModal({ visible, year, month, markedDays, onSelect, onClose }:
             const hasAtt  = markedDays.has(day);
             const isToday = isCurrentMonth && day === todayDay;
             return (
-              <TouchableOpacity
-                key={day}
-                style={[
-                  styles.calCell,
-                  styles.calDayBtn,
-                  hasAtt   && styles.calDayMarked,
-                  !hasAtt && isToday && styles.calDayToday,
-                ]}
-                onPress={() => { onSelect(day); onClose(); }}
-                activeOpacity={0.7}
-              >
-                <Text style={[
-                  styles.calDayNum,
-                  hasAtt   && styles.calDayNumMarked,
-                  !hasAtt && isToday && styles.calDayNumToday,
-                ]}>
-                  {day}
-                </Text>
-                {hasAtt && <View style={styles.calDot} />}
-              </TouchableOpacity>
+              <View key={day} style={styles.calCell}>
+                <TouchableOpacity
+                  style={[
+                    styles.calDayBtn,
+                    hasAtt   && styles.calDayMarked,
+                    !hasAtt && isToday && styles.calDayToday,
+                  ]}
+                  onPress={() => { onSelect(day); onClose(); }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[
+                    styles.calDayNum,
+                    hasAtt   && styles.calDayNumMarked,
+                    !hasAtt && isToday && styles.calDayNumToday,
+                  ]}>
+                    {day}
+                  </Text>
+                  {hasAtt && <View style={styles.calDot} />}
+                </TouchableOpacity>
+              </View>
             );
           })}
         </View>
@@ -253,26 +253,26 @@ const WorkerCard = memo(function WorkerCard({
           const present = grid[gridKey(worker.id, day)] ?? false;
           const isToday = isCurrentMonth && day === todayDay;
           return (
-            <TouchableOpacity
-              key={day}
-              style={[
-                styles.calCell,
-                styles.calDayBtn,
-                present    && styles.calDayMarked,
-                !present   && isToday && styles.calDayToday,
-              ]}
-              onPress={() => { if (!isSubmitted) onToggle(worker.id, day); }}
-              activeOpacity={0.7}
-              disabled={isSubmitted}
-            >
-              <Text style={[
-                styles.calDayNum,
-                present    && styles.calDayNumMarked,
-                !present   && isToday && styles.calDayNumToday,
-              ]}>
-                {day}
-              </Text>
-            </TouchableOpacity>
+            <View key={day} style={styles.calCell}>
+              <TouchableOpacity
+                style={[
+                  styles.calDayBtn,
+                  present  && styles.calDayMarked,
+                  !present && isToday && styles.calDayToday,
+                ]}
+                onPress={() => { if (!isSubmitted) onToggle(worker.id, day); }}
+                activeOpacity={0.7}
+                disabled={isSubmitted}
+              >
+                <Text style={[
+                  styles.calDayNum,
+                  present  && styles.calDayNumMarked,
+                  !present && isToday && styles.calDayNumToday,
+                ]}>
+                  {day}
+                </Text>
+              </TouchableOpacity>
+            </View>
           );
         })}
       </View>
@@ -603,7 +603,7 @@ const styles = StyleSheet.create({
   dowLabel:        { width: CELL_SIZE, textAlign: 'center', fontSize: 10, fontWeight: '600', color: '#aaa', paddingVertical: 2 },
   calGrid:         { flexDirection: 'row', flexWrap: 'wrap' },
   calCell:         { width: CELL_SIZE, aspectRatio: 1, alignItems: 'center', justifyContent: 'center', padding: 2 },
-  calDayBtn:       { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', borderRadius: 6 },
+  calDayBtn:       { flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 6 },
   calDayMarked:    { backgroundColor: '#2d6a4f' },
   calDayToday:     { borderWidth: 2, borderColor: '#2d6a4f' },
   calDayNum:       { fontSize: 12, fontWeight: '600', color: '#333' },
