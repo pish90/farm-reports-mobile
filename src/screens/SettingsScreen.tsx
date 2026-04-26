@@ -1,4 +1,5 @@
 import { Feather } from '@expo/vector-icons';
+import * as Updates from 'expo-updates';
 import { useState } from 'react';
 import {
   Alert,
@@ -227,6 +228,22 @@ export default function SettingsScreen() {
         onSubmit={handleChangePassword}
         onClose={() => setShowChangePassword(false)}
       />
+
+      {/* About */}
+      <Text style={styles.sectionHeader}>About</Text>
+      <View style={styles.section}>
+        <View style={[styles.row, { borderBottomWidth: 0 }]}>
+          <View style={styles.rowIcon}>
+            <Feather name="info" size={18} color="#2d6a4f" />
+          </View>
+          <View style={styles.rowText}>
+            <Text style={styles.rowLabel}>Update ID</Text>
+            <Text style={[styles.rowSubtitle, { fontFamily: 'monospace', fontSize: 11 }]}>
+              {Updates.updateId ?? 'development build'}
+            </Text>
+          </View>
+        </View>
+      </View>
 
       {/* Admin: reset user password */}
       <PasswordModal
