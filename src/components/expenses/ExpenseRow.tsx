@@ -14,9 +14,10 @@ interface Props {
   expense: LocalExpenseRecord;
   onEdit: (expense: LocalExpenseRecord) => void;
   onDelete: (expense: LocalExpenseRecord) => void;
+  onViewReceipt?: (uri: string) => void;
 }
 
-export default function ExpenseRow({ expense, onEdit, onDelete }: Props) {
+export default function ExpenseRow({ expense, onEdit, onDelete, onViewReceipt }: Props) {
   const swipeRef = useRef<Swipeable>(null);
 
   function handleDelete() {
@@ -62,7 +63,13 @@ export default function ExpenseRow({ expense, onEdit, onDelete }: Props) {
         </View>
 
         {expense.receipt_image_uri ? (
-          <Feather name="camera" size={14} color="#52B788" style={styles.receiptIcon} />
+          <TouchableOpacity
+            onPress={() => onViewReceipt?.(expense.receipt_image_uri!)}
+            hitSlop={8}
+            style={styles.receiptIcon}
+          >
+            <Feather name="camera" size={14} color="#52B788" />
+          </TouchableOpacity>
         ) : null}
         <Text style={styles.cost}>{expense.cost.toFixed(2)}</Text>
         <Feather name="chevron-right" size={16} color="#ccc" style={styles.chevron} />

@@ -238,6 +238,10 @@ export async function saveExpenses(
 ): Promise<void> {
   const db = getDb();
   await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      'DELETE FROM local_expense_apportionments WHERE expense_local_id IN (SELECT id FROM local_expenses WHERE report_id = ?)',
+      [reportId],
+    );
     await db.runAsync('DELETE FROM local_expenses WHERE report_id = ?', [reportId]);
     for (const r of records) {
       const result = await db.runAsync(

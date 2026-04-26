@@ -4,6 +4,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { TouchableOpacity, View } from 'react-native';
 import SyncStatusBadge from '../components/shared/SyncStatusBadge';
 import AdminDashboardScreen from '../screens/AdminDashboardScreen';
+import AdminFarmDetailScreen from '../screens/AdminFarmDetailScreen';
 import AttendanceScreen from '../screens/AttendanceScreen';
 import ExpensesScreen from '../screens/expenses/ExpensesScreen';
 import LivestockScreen from '../screens/livestock/LivestockScreen';
@@ -12,6 +13,7 @@ import SettingsScreen from '../screens/SettingsScreen';
 import WorkersScreen from '../screens/WorkersScreen';
 import { useAuth } from '../store/AuthContext';
 import {
+  AdminStackParamList,
   AttendanceStackParamList,
   ExpensesStackParamList,
   LivestockStackParamList,
@@ -19,6 +21,25 @@ import {
   MilkStackParamList,
 } from '../types';
 import { navigationRef } from './navigationRef';
+
+const AdminStack = createNativeStackNavigator<AdminStackParamList>();
+
+function AdminNavigator() {
+  return (
+    <AdminStack.Navigator screenOptions={{ headerShown: false }}>
+      <AdminStack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
+      <AdminStack.Screen
+        name="AdminFarmDetail"
+        component={AdminFarmDetailScreen}
+        options={{
+          headerShown: true,
+          headerTitleStyle: { fontWeight: '600', fontSize: 17 },
+          headerTintColor: '#2d6a4f',
+        }}
+      />
+    </AdminStack.Navigator>
+  );
+}
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
@@ -115,8 +136,8 @@ export default function MainNavigator() {
       {isAdmin && (
         <Tab.Screen
           name="Admin"
-          component={AdminDashboardScreen}
-          options={{ headerTitle: 'Farm Overview' }}
+          component={AdminNavigator}
+          options={{ headerShown: false }}
         />
       )}
       <Tab.Screen

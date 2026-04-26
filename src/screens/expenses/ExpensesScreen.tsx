@@ -3,12 +3,14 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  Image,
+  Modal,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
-import ExpenseForm, { ExpenseFormValues } from '../../components/expenses/ExpenseForm';
+import ExpenseForm, { ApportionmentValue, ExpenseFormValues } from '../../components/expenses/ExpenseForm';
 import ExpenseRow from '../../components/expenses/ExpenseRow';
 import MonthYearSelector from '../../components/shared/MonthYearSelector';
 import { getDb } from '../../db/database';
@@ -26,11 +28,14 @@ import {
 } from '../../services/lookupService';
 import { useAuth } from '../../store/AuthContext';
 
+// Expense enriched with its apportionments for round-tripping through the form
+type ExpenseWithApports = LocalExpenseRecord & { apportionments: ApportionmentValue[] };
+
 function buildDate(year: number, month: number, day: number): string {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
-function toFormValues(expense: LocalExpenseRecord): ExpenseFormValues {
+function toFormValues(expense: ExpenseWithApports): ExpenseFormValues {
   const day = parseInt(expense.date.split('-')[2], 10);
   return {
     day: String(day),
@@ -44,7 +49,7 @@ function toFormValues(expense: LocalExpenseRecord): ExpenseFormValues {
     business_unit_id: expense.business_unit_id ?? null,
     business_unit_code: expense.business_unit_code ?? null,
     business_unit_name: expense.business_unit_name ?? null,
-    apportionments: [],
+    apportionments: expense.apportionments,
     receipt_image_uri: expense.receipt_image_uri ?? null,
   };
 }
@@ -57,23 +62,25 @@ export default function ExpensesScreen() {
   const [month, setMonth] = useState(now.getMonth() + 1);
 
   const [localReportId, setLocalReportId] = useState<number | null>(null);
-  const [expenses,      setExpenses]      = useState<LocalExpenseRecord[]>([]);
+  const [expenses,      setExpenses]      = useState<ExpenseWithApports[]>([]);
   const [loadError,     setLoadError]     = useState<string | null>(null);
   const [isLoaded,      setIsLoaded]      = useState(false);
   const [isSubmitted,   setIsSubmitted]   = useState(false);
 
   const [formVisible,    setFormVisible]    = useState(false);
-  const [editingExpense, setEditingExpense] = useState<LocalExpenseRecord | null>(null);
+  const [editingExpense, setEditingExpense] = useState<ExpenseWithApports | null>(null);
+  const [receiptUri,     setReceiptUri]     = useState<string | null>(null);
 
   const [categories,    setCategories]    = useState<ExpenseCategoryDto[]>([]);
   const [businessUnits, setBusinessUnits] = useState<BusinessUnitDto[]>([]);
 
-  // ── Load report + expenses ─────────────────────────────────────────────────
+  // ── Load report + expenses + apportionments ───────────────────────────────
   useEffect(() => {
     if (!user) return;
     setIsLoaded(false);
     setLoadError(null);
     setExpenses([]);
+    load();
 
     async function load() {
       const report = await getOrCreateLocalReport(user!.farmId, year, month);
@@ -84,21 +91,48 @@ export default function ExpensesScreen() {
         'SELECT * FROM local_expenses WHERE report_id = ? ORDER BY entry_no',
         [report.id],
       );
-      setExpenses(rows);
+
+      const apportRows = await getDb().getAllAsync<{
+        expense_local_id: number;
+        business_unit_id: number;
+        business_unit_code: string;
+        business_unit_name: string;
+        percentage: number;
+        amount: number;
+      }>(
+        `SELECT ea.* FROM local_expense_apportionments ea
+         JOIN local_expenses e ON ea.expense_local_id = e.id
+         WHERE e.report_id = ?`,
+        [report.id],
+      );
+
+      const apportByExpenseId: Record<number, ApportionmentValue[]> = {};
+      for (const ap of apportRows) {
+        if (!apportByExpenseId[ap.expense_local_id]) apportByExpenseId[ap.expense_local_id] = [];
+        apportByExpenseId[ap.expense_local_id].push({
+          business_unit_id: ap.business_unit_id,
+          business_unit_code: ap.business_unit_code,
+          business_unit_name: ap.business_unit_name,
+          percentage: String(ap.percentage),
+          amount: String(ap.amount),
+        });
+      }
+
+      setExpenses(rows.map(e => ({ ...e, apportionments: apportByExpenseId[e.id] ?? [] })));
       setIsLoaded(true);
     }
 
     load().catch((e) => setLoadError(e.message ?? 'Failed to load expenses'));
   }, [user?.farmId, year, month]);
 
-  // ── Load lookup data once ──────────────────────────────────────────────────
+  // ── Load lookup data once ─────────────────────────────────────────────────
   useEffect(() => {
     getExpenseCategories().then(setCategories).catch(() => {});
     getBusinessUnits().then(setBusinessUnits).catch(() => {});
   }, []);
 
-  // ── Persist and reload ─────────────────────────────────────────────────────
-  async function persistAndReload(reportId: number, updated: LocalExpenseRecord[]) {
+  // ── Persist and reload ────────────────────────────────────────────────────
+  async function persistAndReload(reportId: number, updated: ExpenseWithApports[]) {
     const inputs = updated.map((e) => ({
       entry_no: e.entry_no,
       date: e.date,
@@ -113,29 +147,59 @@ export default function ExpensesScreen() {
       business_unit_code: e.business_unit_code,
       business_unit_name: e.business_unit_name,
       receipt_image_uri: e.receipt_image_uri,
+      apportionments: e.apportionments.map(ap => ({
+        business_unit_id: ap.business_unit_id,
+        business_unit_code: ap.business_unit_code,
+        business_unit_name: ap.business_unit_name,
+        percentage: parseFloat(ap.percentage) || 0,
+        amount: parseFloat(ap.amount) || 0,
+      })),
     }));
     await saveExpenses(reportId, inputs);
     await markSectionDirty(reportId, 'expenses');
 
+    // Reload with apportionments
     const rows = await getDb().getAllAsync<LocalExpenseRecord>(
       'SELECT * FROM local_expenses WHERE report_id = ? ORDER BY entry_no',
       [reportId],
     );
-    setExpenses(rows);
+    const apportRows = await getDb().getAllAsync<{
+      expense_local_id: number;
+      business_unit_id: number; business_unit_code: string; business_unit_name: string;
+      percentage: number; amount: number;
+    }>(
+      `SELECT ea.* FROM local_expense_apportionments ea
+       JOIN local_expenses e ON ea.expense_local_id = e.id
+       WHERE e.report_id = ?`,
+      [reportId],
+    );
+    const apportByExpenseId: Record<number, ApportionmentValue[]> = {};
+    for (const ap of apportRows) {
+      if (!apportByExpenseId[ap.expense_local_id]) apportByExpenseId[ap.expense_local_id] = [];
+      apportByExpenseId[ap.expense_local_id].push({
+        business_unit_id: ap.business_unit_id,
+        business_unit_code: ap.business_unit_code,
+        business_unit_name: ap.business_unit_name,
+        percentage: String(ap.percentage),
+        amount: String(ap.amount),
+      });
+    }
+    setExpenses(rows.map(e => ({ ...e, apportionments: apportByExpenseId[e.id] ?? [] })));
   }
 
-  // ── Open / close form ──────────────────────────────────────────────────────
+  // ── Open form ─────────────────────────────────────────────────────────────
   function openAdd() {
     setEditingExpense(null);
     setFormVisible(true);
   }
 
   function openEdit(expense: LocalExpenseRecord) {
-    setEditingExpense(expense);
+    const rich = expenses.find(e => e.id === expense.id) ?? { ...expense, apportionments: [] };
+    setEditingExpense(rich);
     setFormVisible(true);
   }
 
-  // ── Save ───────────────────────────────────────────────────────────────────
+  // ── Save ──────────────────────────────────────────────────────────────────
   const handleSave = useCallback(
     async (values: ExpenseFormValues) => {
       if (!localReportId || isSubmitted) return;
@@ -145,7 +209,7 @@ export default function ExpensesScreen() {
       const cost = parseFloat(values.cost);
       const date = buildDate(year, month, day);
 
-      let updated: LocalExpenseRecord[];
+      let updated: ExpenseWithApports[];
 
       if (editingExpense) {
         updated = expenses.map((e) =>
@@ -163,6 +227,7 @@ export default function ExpensesScreen() {
                 business_unit_code: values.business_unit_code,
                 business_unit_name: values.business_unit_name,
                 receipt_image_uri: values.receipt_image_uri,
+                apportionments: values.apportionments,
               }
             : e,
         );
@@ -185,11 +250,11 @@ export default function ExpensesScreen() {
             business_unit_code: values.business_unit_code,
             business_unit_name: values.business_unit_name,
             receipt_image_uri: values.receipt_image_uri,
+            apportionments: values.apportionments,
           },
         ];
       }
 
-      // Renumber sequentially
       updated = updated.map((e, i) => ({ ...e, entry_no: i + 1 }));
 
       try {
@@ -201,42 +266,37 @@ export default function ExpensesScreen() {
     [localReportId, expenses, editingExpense, year, month],
   );
 
-  // ── Delete ─────────────────────────────────────────────────────────────────
+  // ── Delete ────────────────────────────────────────────────────────────────
   const handleDelete = useCallback(
     async (expense: LocalExpenseRecord) => {
       if (!localReportId || isSubmitted) return;
-
       const filtered = expenses
         .filter((e) => e.id !== expense.id)
         .map((e, i) => ({ ...e, entry_no: i + 1 }));
-
       try {
         await persistAndReload(localReportId, filtered);
-      } catch {
-        // state unchanged
-      }
+      } catch {}
     },
     [localReportId, expenses],
   );
 
-  // ── Totals ─────────────────────────────────────────────────────────────────
   const total = expenses.reduce((sum, e) => sum + e.cost, 0);
 
-  // ── Render ─────────────────────────────────────────────────────────────────
   const renderItem = useCallback(
-    ({ item }: { item: LocalExpenseRecord }) => (
-      <ExpenseRow expense={item} onEdit={openEdit} onDelete={handleDelete} />
+    ({ item }: { item: ExpenseWithApports }) => (
+      <ExpenseRow
+        expense={item}
+        onEdit={openEdit}
+        onDelete={handleDelete}
+        onViewReceipt={setReceiptUri}
+      />
     ),
     [handleDelete],
   );
 
   return (
     <View style={styles.container}>
-      <MonthYearSelector
-        year={year}
-        month={month}
-        onChange={(y, m) => { setYear(y); setMonth(m); }}
-      />
+      <MonthYearSelector year={year} month={month} onChange={(y, m) => { setYear(y); setMonth(m); }} />
 
       {loadError ? (
         <View style={styles.centered}>
@@ -274,13 +334,10 @@ export default function ExpensesScreen() {
                 </View>
               ) : null
             }
-            contentContainerStyle={
-              expenses.length === 0 ? styles.emptyContainer : styles.listContent
-            }
+            contentContainerStyle={expenses.length === 0 ? styles.emptyContainer : styles.listContent}
             keyboardShouldPersistTaps="handled"
           />
 
-          {/* Floating action button — hidden when submitted */}
           {!isSubmitted && (
             <TouchableOpacity style={styles.fab} onPress={openAdd} activeOpacity={0.85}>
               <Feather name="plus" size={28} color="#fff" />
@@ -300,6 +357,17 @@ export default function ExpensesScreen() {
         onSave={handleSave}
         onCancel={() => setFormVisible(false)}
       />
+
+      <Modal visible={!!receiptUri} transparent animationType="fade" onRequestClose={() => setReceiptUri(null)}>
+        <TouchableOpacity style={styles.receiptOverlay} activeOpacity={1} onPress={() => setReceiptUri(null)}>
+          {receiptUri ? (
+            <Image source={{ uri: receiptUri }} style={styles.receiptFullImage} resizeMode="contain" />
+          ) : null}
+          <TouchableOpacity style={styles.receiptCloseBtn} onPress={() => setReceiptUri(null)}>
+            <Feather name="x" size={20} color="#fff" />
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -308,53 +376,36 @@ const styles = StyleSheet.create({
   container:       { flex: 1, backgroundColor: '#f5f7f9' },
   submittedBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#2d6a4f', paddingVertical: 6 },
   submittedText:   { fontSize: 12, fontWeight: '600', color: '#fff' },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  errorText: { marginTop: 12, color: '#e53e3e', textAlign: 'center', fontSize: 14 },
-
-  listContent: { paddingBottom: 100 },
-  emptyContainer: { flex: 1 },
-
-  empty: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 64,
-  },
-  emptyText: { fontSize: 16, fontWeight: '600', color: '#aaa', marginTop: 14 },
-  emptyHint: { fontSize: 13, color: '#bbb', marginTop: 4 },
-
+  centered:        { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  errorText:       { marginTop: 12, color: '#e53e3e', textAlign: 'center', fontSize: 14 },
+  listContent:     { paddingBottom: 100 },
+  emptyContainer:  { flex: 1 },
+  empty:           { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 64 },
+  emptyText:       { fontSize: 16, fontWeight: '600', color: '#aaa', marginTop: 14 },
+  emptyHint:       { fontSize: 13, color: '#bbb', marginTop: 4 },
   totalCard: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    margin: 16,
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: '#2d6a4f',
-    borderRadius: 12,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    margin: 16, paddingHorizontal: 20, paddingVertical: 16,
+    backgroundColor: '#2d6a4f', borderRadius: 12,
   },
   totalLabel: { fontSize: 16, fontWeight: '700', color: '#fff' },
-  totalValue: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#fff',
-    fontVariant: ['tabular-nums'],
-  },
-
+  totalValue: { fontSize: 18, fontWeight: '700', color: '#fff', fontVariant: ['tabular-nums'] },
   fab: {
-    position: 'absolute',
-    bottom: 24,
-    right: 24,
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    backgroundColor: '#2d6a4f',
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 5,
+    position: 'absolute', bottom: 24, right: 24,
+    width: 58, height: 58, borderRadius: 29,
+    backgroundColor: '#2d6a4f', alignItems: 'center', justifyContent: 'center',
+    elevation: 6, shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.25, shadowRadius: 5,
+  },
+  receiptOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.92)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  receiptFullImage: { width: '100%', height: '80%' },
+  receiptCloseBtn: {
+    position: 'absolute', top: 48, right: 20,
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center', justifyContent: 'center',
   },
 });
