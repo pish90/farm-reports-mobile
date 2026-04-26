@@ -610,7 +610,7 @@ const styles = StyleSheet.create({
   dowLabel:        { width: CELL_SIZE, textAlign: 'center', fontSize: 10, fontWeight: '600', color: '#aaa', paddingVertical: 2 },
   calGrid:         { flexDirection: 'row', flexWrap: 'wrap' },
   calCell:         { width: CELL_SIZE, aspectRatio: 1, alignItems: 'center', justifyContent: 'center', padding: 2 },
-  calDayBtn:       { flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 999 },
+  calDayBtn:       { flex: 1, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center', borderRadius: 999 },
   calDayFuture:    { opacity: 0.25 },
   calDayMarked:    { backgroundColor: '#2d6a4f' },
   calDayToday:     { borderWidth: 2, borderColor: '#2d6a4f' },
