@@ -31,6 +31,15 @@ import { useAuth } from '../../store/AuthContext';
 // Expense enriched with its apportionments for round-tripping through the form
 type ExpenseWithApports = LocalExpenseRecord & { apportionments: ApportionmentValue[] };
 
+function parseUris(raw: string | null): string[] {
+  if (!raw) return [];
+  if (raw.startsWith('[')) { try { return JSON.parse(raw); } catch {} }
+  return [raw];
+}
+function serializeUris(uris: string[]): string | null {
+  return uris.length > 0 ? JSON.stringify(uris) : null;
+}
+
 function buildDate(year: number, month: number, day: number): string {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
@@ -50,7 +59,7 @@ function toFormValues(expense: ExpenseWithApports): ExpenseFormValues {
     business_unit_code: expense.business_unit_code ?? null,
     business_unit_name: expense.business_unit_name ?? null,
     apportionments: expense.apportionments,
-    receipt_image_uri: expense.receipt_image_uri ?? null,
+    receipt_image_uris: parseUris(expense.receipt_image_uri),
   };
 }
 
@@ -69,7 +78,8 @@ export default function ExpensesScreen() {
 
   const [formVisible,    setFormVisible]    = useState(false);
   const [editingExpense, setEditingExpense] = useState<ExpenseWithApports | null>(null);
-  const [receiptUri,     setReceiptUri]     = useState<string | null>(null);
+  const [receiptUris,    setReceiptUris]    = useState<string[]>([]);
+  const [receiptIdx,     setReceiptIdx]     = useState(0);
 
   const [categories,    setCategories]    = useState<ExpenseCategoryDto[]>([]);
   const [businessUnits, setBusinessUnits] = useState<BusinessUnitDto[]>([]);
@@ -226,7 +236,7 @@ export default function ExpensesScreen() {
                 business_unit_id: values.business_unit_id,
                 business_unit_code: values.business_unit_code,
                 business_unit_name: values.business_unit_name,
-                receipt_image_uri: values.receipt_image_uri,
+                receipt_image_uri: serializeUris(values.receipt_image_uris),
                 apportionments: values.apportionments,
               }
             : e,
@@ -249,7 +259,7 @@ export default function ExpensesScreen() {
             business_unit_id: values.business_unit_id,
             business_unit_code: values.business_unit_code,
             business_unit_name: values.business_unit_name,
-            receipt_image_uri: values.receipt_image_uri,
+            receipt_image_uri: serializeUris(values.receipt_image_uris),
             apportionments: values.apportionments,
           },
         ];
@@ -288,7 +298,7 @@ export default function ExpensesScreen() {
         expense={item}
         onEdit={openEdit}
         onDelete={handleDelete}
-        onViewReceipt={setReceiptUri}
+        onViewReceipts={uris => { setReceiptUris(uris); setReceiptIdx(0); }}
       />
     ),
     [handleDelete],
@@ -358,15 +368,36 @@ export default function ExpensesScreen() {
         onCancel={() => setFormVisible(false)}
       />
 
-      <Modal visible={!!receiptUri} transparent animationType="fade" onRequestClose={() => setReceiptUri(null)}>
-        <TouchableOpacity style={styles.receiptOverlay} activeOpacity={1} onPress={() => setReceiptUri(null)}>
-          {receiptUri ? (
-            <Image source={{ uri: receiptUri }} style={styles.receiptFullImage} resizeMode="contain" />
+      <Modal visible={receiptUris.length > 0} transparent animationType="fade" onRequestClose={() => setReceiptUris([])}>
+        <View style={styles.receiptOverlay}>
+          {receiptUris[receiptIdx] ? (
+            <Image source={{ uri: receiptUris[receiptIdx] }} style={styles.receiptFullImage} resizeMode="contain" />
           ) : null}
-          <TouchableOpacity style={styles.receiptCloseBtn} onPress={() => setReceiptUri(null)}>
+          {receiptUris.length > 1 && (
+            <>
+              <TouchableOpacity
+                style={[styles.receiptNavBtn, styles.receiptNavLeft]}
+                onPress={() => setReceiptIdx(i => Math.max(0, i - 1))}
+                disabled={receiptIdx === 0}
+              >
+                <Feather name="chevron-left" size={28} color={receiptIdx === 0 ? 'rgba(255,255,255,0.3)' : '#fff'} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.receiptNavBtn, styles.receiptNavRight]}
+                onPress={() => setReceiptIdx(i => Math.min(receiptUris.length - 1, i + 1))}
+                disabled={receiptIdx === receiptUris.length - 1}
+              >
+                <Feather name="chevron-right" size={28} color={receiptIdx === receiptUris.length - 1 ? 'rgba(255,255,255,0.3)' : '#fff'} />
+              </TouchableOpacity>
+              <View style={styles.receiptCounter}>
+                <Text style={styles.receiptCounterText}>{receiptIdx + 1} / {receiptUris.length}</Text>
+              </View>
+            </>
+          )}
+          <TouchableOpacity style={styles.receiptCloseBtn} onPress={() => setReceiptUris([])}>
             <Feather name="x" size={20} color="#fff" />
           </TouchableOpacity>
-        </TouchableOpacity>
+        </View>
       </Modal>
     </View>
   );
@@ -408,4 +439,16 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center', justifyContent: 'center',
   },
+  receiptNavBtn: {
+    position: 'absolute', top: '50%', padding: 12,
+    backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 24,
+  },
+  receiptNavLeft:  { left: 12 },
+  receiptNavRight: { right: 12 },
+  receiptCounter: {
+    position: 'absolute', bottom: 48,
+    backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 12,
+    paddingHorizontal: 12, paddingVertical: 4,
+  },
+  receiptCounterText: { color: '#fff', fontSize: 13, fontWeight: '600' },
 });

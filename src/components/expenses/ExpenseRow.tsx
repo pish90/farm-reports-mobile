@@ -10,14 +10,20 @@ function formatDate(iso: string): string {
   return `${parts[2]}/${parts[1]}/${parts[0]}`;
 }
 
+function parseUris(raw: string | null): string[] {
+  if (!raw) return [];
+  if (raw.startsWith('[')) { try { return JSON.parse(raw); } catch {} }
+  return [raw];
+}
+
 interface Props {
   expense: LocalExpenseRecord;
   onEdit: (expense: LocalExpenseRecord) => void;
   onDelete: (expense: LocalExpenseRecord) => void;
-  onViewReceipt?: (uri: string) => void;
+  onViewReceipts?: (uris: string[]) => void;
 }
 
-export default function ExpenseRow({ expense, onEdit, onDelete, onViewReceipt }: Props) {
+export default function ExpenseRow({ expense, onEdit, onDelete, onViewReceipts }: Props) {
   const swipeRef = useRef<Swipeable>(null);
 
   function handleDelete() {
@@ -62,15 +68,16 @@ export default function ExpenseRow({ expense, onEdit, onDelete, onViewReceipt }:
           </Text>
         </View>
 
-        {expense.receipt_image_uri ? (
-          <TouchableOpacity
-            onPress={() => onViewReceipt?.(expense.receipt_image_uri!)}
-            hitSlop={8}
-            style={styles.receiptIcon}
-          >
-            <Feather name="camera" size={14} color="#52B788" />
-          </TouchableOpacity>
-        ) : null}
+        {(() => {
+          const uris = parseUris(expense.receipt_image_uri);
+          if (!uris.length) return null;
+          return (
+            <TouchableOpacity onPress={() => onViewReceipts?.(uris)} hitSlop={8} style={styles.receiptIcon}>
+              <Feather name="camera" size={14} color="#52B788" />
+              {uris.length > 1 && <Text style={styles.receiptCount}>{uris.length}</Text>}
+            </TouchableOpacity>
+          );
+        })()}
         <Text style={styles.cost}>{expense.cost.toFixed(2)}</Text>
         <Feather name="chevron-right" size={16} color="#ccc" style={styles.chevron} />
       </TouchableOpacity>
@@ -115,7 +122,8 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
     marginLeft: 8,
   },
-  receiptIcon: { marginLeft: 6 },
+  receiptIcon:  { marginLeft: 6, alignItems: 'center' },
+  receiptCount: { fontSize: 9, fontWeight: '700', color: '#52B788', marginTop: 1 },
   chevron: { marginLeft: 4 },
   deleteAction: {
     width: 80,

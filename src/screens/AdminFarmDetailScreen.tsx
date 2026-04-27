@@ -67,7 +67,7 @@ function serverExpenseToFormValues(e: ServerExpense): ExpenseFormValues {
       percentage: String(ap.percentage),
       amount: String(ap.amount),
     } as ApportionmentValue)),
-    receipt_image_uri: null,
+    receipt_image_uris: [],
   };
 }
 
@@ -275,7 +275,7 @@ export default function AdminFarmDetailScreen({ route, navigation }: Props) {
     if (!report) return;
     setIsExporting(true);
     try {
-      await adminService.downloadFarmExcel(report.id, year, month);
+      await adminService.downloadFarmExcel(report.id, farmName, year, month);
     } catch {
       Alert.alert('Export Failed', 'Could not generate the Excel file.');
     } finally {

@@ -51,7 +51,7 @@ export interface ExpenseFormValues {
   business_unit_code: string | null;
   business_unit_name: string | null;
   apportionments: ApportionmentValue[];
-  receipt_image_uri: string | null;
+  receipt_image_uris: string[];
 }
 
 const EMPTY: ExpenseFormValues = {
@@ -59,7 +59,7 @@ const EMPTY: ExpenseFormValues = {
   category_id: null, category_code: null, category_name: null,
   business_unit_id: null, business_unit_code: null, business_unit_name: null,
   apportionments: [],
-  receipt_image_uri: null,
+  receipt_image_uris: [],
 };
 
 interface Props {
@@ -155,7 +155,7 @@ export default function ExpenseForm({ visible, year, month, initial, isEditing, 
   const watchedBuCode = useWatch({ control, name: 'business_unit_code' });
   const watchedBuName = useWatch({ control, name: 'business_unit_name' });
   const watchedApportionments = useWatch({ control, name: 'apportionments' });
-  const watchedReceiptUri = useWatch({ control, name: 'receipt_image_uri' });
+  const watchedReceiptUris = useWatch({ control, name: 'receipt_image_uris' });
 
   const isShared = useMemo(() => {
     return watchedBuId != null &&
@@ -218,8 +218,12 @@ export default function ExpenseForm({ visible, year, month, initial, isEditing, 
       ? await ImagePicker.launchCameraAsync({ quality: 0.7, allowsEditing: true })
       : await ImagePicker.launchImageLibraryAsync({ quality: 0.7, allowsEditing: true, mediaTypes: 'images' });
     if (!result.canceled && result.assets[0]) {
-      setValue('receipt_image_uri', result.assets[0].uri);
+      setValue('receipt_image_uris', [...(watchedReceiptUris ?? []), result.assets[0].uri]);
     }
+  }
+
+  function removeReceiptAt(idx: number) {
+    setValue('receipt_image_uris', (watchedReceiptUris ?? []).filter((_, i) => i !== idx));
   }
 
   const anyPickerOpen = showCatPicker || showBuPicker || showApportBuPicker !== null;
@@ -400,31 +404,38 @@ export default function ExpenseForm({ visible, year, month, initial, isEditing, 
               </View>
             )}
 
-            {/* Receipt Photo */}
-            <Text style={styles.label}>Receipt Photo</Text>
-            {watchedReceiptUri ? (
-              <View style={styles.receiptPreview}>
-                <Image source={{ uri: watchedReceiptUri }} style={styles.receiptThumb} />
-                <TouchableOpacity
-                  style={styles.receiptRemoveBtn}
-                  onPress={() => setValue('receipt_image_uri', null)}
-                  hitSlop={8}
-                >
-                  <Feather name="x" size={14} color="#fff" />
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <View style={styles.receiptBtnRow}>
-                <TouchableOpacity style={styles.receiptBtn} onPress={() => pickReceipt('camera')} activeOpacity={0.7}>
-                  <Feather name="camera" size={16} color="#2d6a4f" />
-                  <Text style={styles.receiptBtnText}>Camera</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.receiptBtn} onPress={() => pickReceipt('gallery')} activeOpacity={0.7}>
-                  <Feather name="image" size={16} color="#2d6a4f" />
-                  <Text style={styles.receiptBtnText}>Gallery</Text>
-                </TouchableOpacity>
-              </View>
+            {/* Receipt Photos */}
+            <Text style={styles.label}>
+              Receipt Photos{(watchedReceiptUris ?? []).length > 0 ? ` (${watchedReceiptUris.length})` : ''}
+            </Text>
+            {(watchedReceiptUris ?? []).length > 0 && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
+                <View style={styles.thumbRow}>
+                  {watchedReceiptUris.map((uri, idx) => (
+                    <View key={idx} style={styles.receiptPreview}>
+                      <Image source={{ uri }} style={styles.receiptThumb} />
+                      <TouchableOpacity
+                        style={styles.receiptRemoveBtn}
+                        onPress={() => removeReceiptAt(idx)}
+                        hitSlop={8}
+                      >
+                        <Feather name="x" size={12} color="#fff" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              </ScrollView>
             )}
+            <View style={styles.receiptBtnRow}>
+              <TouchableOpacity style={styles.receiptBtn} onPress={() => pickReceipt('camera')} activeOpacity={0.7}>
+                <Feather name="camera" size={16} color="#2d6a4f" />
+                <Text style={styles.receiptBtnText}>Camera</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.receiptBtn} onPress={() => pickReceipt('gallery')} activeOpacity={0.7}>
+                <Feather name="image" size={16} color="#2d6a4f" />
+                <Text style={styles.receiptBtnText}>Gallery</Text>
+              </TouchableOpacity>
+            </View>
 
             <View style={{ height: 8 }} />
           </ScrollView>
@@ -605,11 +616,12 @@ const styles = StyleSheet.create({
     paddingVertical: 12, backgroundColor: '#f7faf9',
   },
   receiptBtnText: { fontSize: 14, fontWeight: '600', color: '#2d6a4f' },
-  receiptPreview: { position: 'relative', alignSelf: 'flex-start' },
-  receiptThumb: { width: 100, height: 100, borderRadius: 8, backgroundColor: '#eee' },
+  thumbRow:       { flexDirection: 'row', gap: 10, paddingVertical: 4, paddingHorizontal: 2 },
+  receiptPreview: { position: 'relative' },
+  receiptThumb:   { width: 80, height: 80, borderRadius: 8, backgroundColor: '#eee' },
   receiptRemoveBtn: {
     position: 'absolute', top: -6, right: -6,
-    width: 22, height: 22, borderRadius: 11,
+    width: 20, height: 20, borderRadius: 10,
     backgroundColor: '#e53e3e', alignItems: 'center', justifyContent: 'center',
   },
 });

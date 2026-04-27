@@ -100,9 +100,10 @@ export const adminService = {
     });
   },
 
-  async downloadFarmExcel(reportId: number, year: number, month: number): Promise<void> {
+  async downloadFarmExcel(reportId: number, farmName: string, year: number, month: number): Promise<void> {
     const token = await AsyncStorage.getItem('auth_token');
-    const filename = `farm-report-${year}-${String(month).padStart(2, '0')}.xlsx`;
+    const safeName = farmName.replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/, '');
+    const filename = `${safeName}_${year}-${String(month).padStart(2, '0')}.xlsx`;
     const localUri = (FileSystem.cacheDirectory ?? '') + filename;
 
     const result = await FileSystem.downloadAsync(
