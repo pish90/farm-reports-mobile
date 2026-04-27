@@ -66,7 +66,7 @@ export default function LivestockScreen() {
   useEffect(() => {
     if (!user) return;
     setLoadError(null);
-    getLivestockTypes(user.farmId)
+    getLivestockTypes(user.farmId!)
       .then(setGrouped)
       .catch((e) => setLoadError(e.message ?? 'Failed to load livestock types'));
   }, [user?.farmId]);
@@ -77,7 +77,7 @@ export default function LivestockScreen() {
     setIsLoaded(false);
 
     async function load() {
-      const report = await getOrCreateLocalReport(user!.farmId, year, month);
+      const report = await getOrCreateLocalReport(user!.farmId!, year, month);
       setLocalReportId(report.id);
       setIsSubmitted(report.status === 'submitted');
 

@@ -46,7 +46,7 @@ function buildDate(year: number, month: number, day: number): string {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
-function serverExpenseToFormValues(e: ServerExpense): ExpenseFormValues {
+function serverExpenseToFormValues(e: ServerExpense, receiptUris: string[] = []): ExpenseFormValues {
   const day = parseInt(e.date.split('-')[2], 10);
   return {
     day: String(day),
@@ -67,7 +67,7 @@ function serverExpenseToFormValues(e: ServerExpense): ExpenseFormValues {
       percentage: String(ap.percentage),
       amount: String(ap.amount),
     } as ApportionmentValue)),
-    receipt_image_uris: [],
+    receipt_image_uris: receiptUris,
   };
 }
 
@@ -107,11 +107,12 @@ interface AdminExpenseRowProps {
   expense: ServerExpense;
   onEdit: (e: ServerExpense) => void;
   onDelete: (e: ServerExpense) => void;
-  onViewReceipt?: (uri: string) => void;
+  onViewReceipts?: (uris: string[]) => void;
+  receiptUris?: string[];
   isSubmitted: boolean;
 }
 
-function AdminExpenseRow({ expense, onEdit, onDelete, isSubmitted }: AdminExpenseRowProps) {
+function AdminExpenseRow({ expense, onEdit, onDelete, onViewReceipts, receiptUris = [], isSubmitted }: AdminExpenseRowProps) {
   function renderRightActions() {
     if (isSubmitted) return null;
     return (
@@ -144,6 +145,12 @@ function AdminExpenseRow({ expense, onEdit, onDelete, isSubmitted }: AdminExpens
             {expense.categoryName ? `  ·  ${expense.categoryName}` : ''}
           </Text>
         </View>
+        {receiptUris.length > 0 && (
+          <TouchableOpacity onPress={() => onViewReceipts?.(receiptUris)} hitSlop={8} style={styles.receiptIcon}>
+            <Feather name="camera" size={14} color="#52B788" />
+            {receiptUris.length > 1 && <Text style={styles.receiptCount}>{receiptUris.length}</Text>}
+          </TouchableOpacity>
+        )}
         <Text style={styles.expenseCost}>{expense.cost.toFixed(2)}</Text>
         {!isSubmitted && <Feather name="chevron-right" size={16} color="#ccc" style={{ marginLeft: 4 }} />}
       </TouchableOpacity>
@@ -175,7 +182,9 @@ export default function AdminFarmDetailScreen({ route, navigation }: Props) {
   const [editingExpense, setEditingExpense] = useState<ServerExpense | null>(null);
   const [categories,   setCategories]   = useState<ExpenseCategoryDto[]>([]);
   const [businessUnits,setBusinessUnits]= useState<BusinessUnitDto[]>([]);
-  const [receiptUri,   setReceiptUri]   = useState<string | null>(null);
+  const [receiptUris,  setReceiptUris]  = useState<string[]>([]);
+  const [receiptIdx,   setReceiptIdx]   = useState(0);
+  const [receiptMap,   setReceiptMap]   = useState<Record<number, string[]>>({});
 
   const isSubmitted = report?.status === 'SUBMITTED';
 
@@ -294,6 +303,15 @@ export default function AdminFarmDetailScreen({ route, navigation }: Props) {
     let updatedExpenses: ServerExpense[];
 
     if (editingExpense) {
+      setReceiptMap(prev => {
+        const next = { ...prev };
+        if (values.receipt_image_uris.length > 0) {
+          next[editingExpense.id] = values.receipt_image_uris;
+        } else {
+          delete next[editingExpense.id];
+        }
+        return next;
+      });
       updatedExpenses = report.expenses.map(e =>
         e.id === editingExpense.id
           ? {
@@ -530,6 +548,8 @@ export default function AdminFarmDetailScreen({ route, navigation }: Props) {
                 expense={exp}
                 onEdit={e => { setEditingExpense(e); setFormVisible(true); }}
                 onDelete={handleDeleteExpense}
+                receiptUris={receiptMap[exp.id] ?? []}
+                onViewReceipts={uris => { setReceiptUris(uris); setReceiptIdx(0); }}
                 isSubmitted={isSubmitted}
               />
             ))
@@ -553,7 +573,7 @@ export default function AdminFarmDetailScreen({ route, navigation }: Props) {
         visible={formVisible}
         year={year}
         month={month}
-        initial={editingExpense ? serverExpenseToFormValues(editingExpense) : undefined}
+        initial={editingExpense ? serverExpenseToFormValues(editingExpense, receiptMap[editingExpense.id] ?? []) : undefined}
         isEditing={!!editingExpense}
         categories={categories}
         businessUnits={businessUnits}
@@ -561,12 +581,30 @@ export default function AdminFarmDetailScreen({ route, navigation }: Props) {
         onCancel={() => setFormVisible(false)}
       />
 
-      <Modal visible={!!receiptUri} transparent animationType="fade" onRequestClose={() => setReceiptUri(null)}>
-        <TouchableOpacity style={styles.receiptOverlay} activeOpacity={1} onPress={() => setReceiptUri(null)}>
-          {receiptUri ? (
-            <Image source={{ uri: receiptUri }} style={styles.receiptFullImage} resizeMode="contain" />
+      <Modal visible={receiptUris.length > 0} transparent animationType="fade" onRequestClose={() => setReceiptUris([])}>
+        <View style={styles.receiptOverlay}>
+          <TouchableOpacity style={StyleSheet.absoluteFillObject} activeOpacity={1} onPress={() => setReceiptUris([])} />
+          {receiptUris[receiptIdx] ? (
+            <Image source={{ uri: receiptUris[receiptIdx] }} style={styles.receiptFullImage} resizeMode="contain" pointerEvents="none" />
           ) : null}
-        </TouchableOpacity>
+          {receiptUris.length > 1 && (
+            <>
+              {receiptIdx > 0 && (
+                <TouchableOpacity style={[styles.receiptNavBtn, styles.receiptNavLeft]} onPress={() => setReceiptIdx(i => i - 1)}>
+                  <Feather name="chevron-left" size={28} color="#fff" />
+                </TouchableOpacity>
+              )}
+              {receiptIdx < receiptUris.length - 1 && (
+                <TouchableOpacity style={[styles.receiptNavBtn, styles.receiptNavRight]} onPress={() => setReceiptIdx(i => i + 1)}>
+                  <Feather name="chevron-right" size={28} color="#fff" />
+                </TouchableOpacity>
+              )}
+              <View style={styles.receiptCounter}>
+                <Text style={styles.receiptCounterText}>{receiptIdx + 1} / {receiptUris.length}</Text>
+              </View>
+            </>
+          )}
+        </View>
       </Modal>
     </View>
   );
@@ -653,4 +691,11 @@ const styles = StyleSheet.create({
   // Receipt viewer
   receiptOverlay:    { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', alignItems: 'center', justifyContent: 'center' },
   receiptFullImage:  { width: '100%', height: '80%' },
+  receiptIcon:       { marginLeft: 6, alignItems: 'center' },
+  receiptCount:      { fontSize: 9, fontWeight: '700', color: '#52B788', marginTop: 1 },
+  receiptNavBtn:     { position: 'absolute', top: '45%', padding: 14, backgroundColor: 'rgba(0,0,0,0.45)', borderRadius: 999 },
+  receiptNavLeft:    { left: 16 },
+  receiptNavRight:   { right: 16 },
+  receiptCounter:    { position: 'absolute', bottom: 48, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12 },
+  receiptCounterText:{ color: '#fff', fontSize: 13, fontWeight: '600' },
 });

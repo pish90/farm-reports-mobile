@@ -189,7 +189,7 @@ export default function WorkersScreen() {
     setIsLoaded(false);
     setLoadError(null);
     try {
-      const ws = await getWorkers(user.farmId);
+      const ws = await getWorkers(user.farmId!);
       setWorkers(ws);
     } catch (e: any) {
       setLoadError(e.message ?? 'Failed to load workers');
@@ -202,7 +202,7 @@ export default function WorkersScreen() {
 
   const handleAdd = useCallback(async (name: string) => {
     if (!user) return;
-    await addWorker(user.farmId, name);
+    await addWorker(user.farmId!, name);
     setModalVisible(false);
     await load();
   }, [user?.farmId, load]);
@@ -219,7 +219,7 @@ export default function WorkersScreen() {
           onPress: async () => {
             if (!user) return;
             try {
-              await deactivateWorker(user.farmId, worker.id);
+              await deactivateWorker(user.farmId!, worker.id);
               await load();
             } catch {
               Alert.alert('Error', 'Failed to remove worker. Please try again.');

@@ -148,7 +148,7 @@ export default function SummaryScreen() {
     setLoadError(null);
     setSubmitError(null);
     try {
-      const r = await getOrCreateLocalReport(user.farmId, year, month);
+      const r = await getOrCreateLocalReport(user.farmId!, year, month);
       setReport(r);
       const s = await getReportSectionSummary(r.id, year, month);
       setSummary(s);

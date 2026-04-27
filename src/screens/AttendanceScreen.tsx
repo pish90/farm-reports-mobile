@@ -272,12 +272,17 @@ const WorkerCard = memo(function WorkerCard({
                 disabled={isSubmitted || isFuture}
               >
                 <Text style={[
-                  styles.calDayNum,
-                  present  && styles.calDayNumMarked,
-                  !present && isToday && styles.calDayNumToday,
+                  styles.calDayTiny,
+                  present  && styles.calDayTinyMarked,
+                  !present && isToday && styles.calDayTinyToday,
                 ]}>
                   {day}
                 </Text>
+                {!isFuture && (
+                  <Text style={[styles.calStatusLetter, present ? styles.calStatusP : styles.calStatusA]}>
+                    {present ? 'P' : 'A'}
+                  </Text>
+                )}
               </TouchableOpacity>
             </View>
           );
@@ -339,7 +344,7 @@ export default function AttendanceScreen() {
     useCallback(() => {
       if (!user) return;
       setLoadError(null);
-      getWorkers(user.farmId)
+      getWorkers(user.farmId!)
         .then(w => { setWorkers(w); setWorkersLoaded(true); })
         .catch(e => { setLoadError(e.message ?? 'Failed to load workers'); setWorkersLoaded(true); });
     }, [user?.farmId]),
@@ -352,7 +357,7 @@ export default function AttendanceScreen() {
     skipSaveRef.current = true;
 
     async function load() {
-      const report = await getOrCreateLocalReport(user!.farmId, year, month);
+      const report = await getOrCreateLocalReport(user!.farmId!, year, month);
       setLocalReportId(report.id);
       setIsSubmitted(report.status === 'submitted');
 
@@ -618,6 +623,12 @@ const styles = StyleSheet.create({
   calDayNumMarked: { color: '#fff' },
   calDayNumToday:  { color: '#2d6a4f' },
   calDot:          { width: 3, height: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.7)', marginTop: 1 },
+  calDayTiny:      { fontSize: 9, fontWeight: '600', color: '#555', lineHeight: 11 },
+  calDayTinyMarked:{ color: '#fff' },
+  calDayTinyToday: { color: '#2d6a4f' },
+  calStatusLetter: { fontSize: 11, fontWeight: '800', lineHeight: 13 },
+  calStatusP:      { color: '#fff' },
+  calStatusA:      { color: '#ccc' },
 
   // Note
   noteSection:       { marginTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#f0f0f0', paddingTop: 8 },

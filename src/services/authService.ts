@@ -39,11 +39,11 @@ export const authService = {
     const payload = decodePayload(token);
     if (!payload) return null;
     return {
-      userId: Number(payload.userId),
-      farmId: Number(payload.farmId),
-      farmName: String(payload.farmName),
+      userId:   Number(payload.userId),
+      farmId:   payload.farmId != null ? Number(payload.farmId) : null,
+      farmName: payload.farmName != null ? String(payload.farmName) : null,
       userName: String(payload.userName),
-      role: String(payload.role ?? 'USER'),
+      role:     String(payload.role ?? 'WORKER'),
     };
   },
 

@@ -93,7 +93,7 @@ export default function ExpensesScreen() {
     load();
 
     async function load() {
-      const report = await getOrCreateLocalReport(user!.farmId, year, month);
+      const report = await getOrCreateLocalReport(user!.farmId!, year, month);
       setLocalReportId(report.id);
       setIsSubmitted(report.status === 'submitted');
 

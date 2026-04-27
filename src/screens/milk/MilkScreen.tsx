@@ -1,4 +1,5 @@
 import { Feather } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import {
@@ -6,6 +7,8 @@ import {
   FlatList,
   StyleSheet,
   Text,
+  TextInput,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import MilkRow, { MilkFormValues, ROW_HEIGHT } from '../../components/milk/MilkRow';
@@ -37,20 +40,60 @@ function fmt(n: number): string {
 
 // ─── Footer ──────────────────────────────────────────────────────────────────
 
-interface FooterProps { totalLitres: number }
+interface FooterProps {
+  totalLitres: number;
+  pricePerLitre: number;
+  isAdmin?: boolean;
+  onPriceChange?: (price: number) => void;
+}
 
-function MilkFooter({ totalLitres }: FooterProps) {
-  const grandTotal = totalLitres * 40;
+function MilkFooter({ totalLitres, pricePerLitre, isAdmin, onPriceChange }: FooterProps) {
+  const [editingPrice, setEditingPrice] = useState<string | null>(null);
+  const grandTotal = totalLitres * pricePerLitre;
+
+  function commitPrice() {
+    const val = parseFloat(editingPrice ?? '');
+    if (!isNaN(val) && val > 0) onPriceChange?.(val);
+    setEditingPrice(null);
+  }
+
   return (
     <View style={footerStyles.container}>
       <View style={footerStyles.row}>
         <Text style={footerStyles.label}>Total Litres</Text>
         <Text style={footerStyles.value}>{fmt(totalLitres)} L</Text>
       </View>
-      <View style={[footerStyles.row, footerStyles.grandRow]}>
-        <Text style={footerStyles.grandLabel}>Value (×40)</Text>
+      <TouchableOpacity
+        style={[footerStyles.row, footerStyles.grandRow]}
+        onPress={isAdmin && editingPrice === null ? () => setEditingPrice(String(pricePerLitre)) : undefined}
+        activeOpacity={isAdmin ? 0.75 : 1}
+      >
+        <View style={footerStyles.grandLabelRow}>
+          {editingPrice !== null ? (
+            <>
+              <Text style={footerStyles.grandLabel}>Value (×</Text>
+              <TextInput
+                style={footerStyles.priceInput}
+                value={editingPrice}
+                onChangeText={setEditingPrice}
+                onBlur={commitPrice}
+                onSubmitEditing={commitPrice}
+                keyboardType="decimal-pad"
+                returnKeyType="done"
+                autoFocus
+                selectTextOnFocus
+              />
+              <Text style={footerStyles.grandLabel}>)</Text>
+            </>
+          ) : (
+            <>
+              <Text style={footerStyles.grandLabel}>Value (×{pricePerLitre})</Text>
+              {isAdmin && <Feather name="edit-2" size={11} color="rgba(255,255,255,0.6)" style={{ marginLeft: 6 }} />}
+            </>
+          )}
+        </View>
         <Text style={footerStyles.grandValue}>{fmt(grandTotal)}</Text>
-      </View>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -80,6 +123,12 @@ const footerStyles = StyleSheet.create({
   value: { fontSize: 15, fontWeight: '600', color: '#1a1a1a', fontVariant: ['tabular-nums'] },
   grandLabel: { fontSize: 15, fontWeight: '700', color: '#fff' },
   grandValue: { fontSize: 15, fontWeight: '700', color: '#fff', fontVariant: ['tabular-nums'] },
+  grandLabelRow: { flexDirection: 'row', alignItems: 'center' },
+  priceInput: {
+    color: '#fff', fontWeight: '700', fontSize: 15,
+    borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.6)',
+    minWidth: 40, textAlign: 'center', paddingVertical: 0, paddingHorizontal: 2,
+  },
 });
 
 // ─── Screen ──────────────────────────────────────────────────────────────────
@@ -87,9 +136,11 @@ const footerStyles = StyleSheet.create({
 export default function MilkScreen() {
   const { user } = useAuth();
   const now = new Date();
+  const isAdmin = user?.role === 'ADMIN';
 
-  const [year,  setYear]  = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth() + 1);
+  const [year,       setYear]       = useState(now.getFullYear());
+  const [month,      setMonth]      = useState(now.getMonth() + 1);
+  const [milkPrice,  setMilkPrice]  = useState(40);
 
   const [localReportId, setLocalReportId] = useState<number | null>(null);
   const [loadError,     setLoadError]     = useState<string | null>(null);
@@ -100,6 +151,13 @@ export default function MilkScreen() {
   const debounceRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const skipSaveRef    = useRef(false);
+
+  useEffect(() => {
+    AsyncStorage.getItem('milk_price_per_litre').then(v => {
+      const n = parseFloat(v ?? '');
+      if (!isNaN(n) && n > 0) setMilkPrice(n);
+    });
+  }, []);
 
   const daysInMonth = getDaysInMonth(year, month);
 
@@ -148,7 +206,7 @@ export default function MilkScreen() {
     setLoadError(null);
 
     async function load() {
-      const report = await getOrCreateLocalReport(user!.farmId, year, month);
+      const report = await getOrCreateLocalReport(user!.farmId!, year, month);
       setLocalReportId(report.id);
       setIsSubmitted(report.status === 'submitted');
 
@@ -255,9 +313,21 @@ export default function MilkScreen() {
     [listItems],
   );
 
+  function handlePriceChange(price: number) {
+    setMilkPrice(price);
+    AsyncStorage.setItem('milk_price_per_litre', String(price));
+  }
+
   const ListFooter = useMemo(
-    () => <MilkFooter totalLitres={totalLitres} />,
-    [totalLitres],
+    () => (
+      <MilkFooter
+        totalLitres={totalLitres}
+        pricePerLitre={milkPrice}
+        isAdmin={isAdmin}
+        onPriceChange={handlePriceChange}
+      />
+    ),
+    [totalLitres, milkPrice, isAdmin],
   );
 
   // ── Main render ─────────────────────────────────────────────────────────

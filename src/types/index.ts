@@ -120,8 +120,8 @@ export type ExpensesStackParamList = {
 
 export interface CurrentUser {
   userId: number;
-  farmId: number;
-  farmName: string;
+  farmId: number | null;
+  farmName: string | null;
   userName: string;
   role: string;
 }
