@@ -2,7 +2,9 @@ import { Feather } from '@expo/vector-icons';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -455,7 +457,7 @@ export default function AttendanceScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <MonthYearSelector year={year} month={month} onChange={(y, m) => { setYear(y); setMonth(m); }} />
 
       {/* Toolbar: manage workers | save status | Daily Register link */}
@@ -554,7 +556,7 @@ export default function AttendanceScreen() {
         onToggle={handleToggle}
         onClose={() => setShowDayAttendance(false)}
       />
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

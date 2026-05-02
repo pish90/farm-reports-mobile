@@ -5,6 +5,8 @@ import { useForm, useWatch } from 'react-hook-form';
 import {
   ActivityIndicator,
   FlatList,
+  KeyboardAvoidingView,
+  Platform,
   StyleSheet,
   Text,
   TextInput,
@@ -332,7 +334,7 @@ export default function MilkScreen() {
 
   // ── Main render ─────────────────────────────────────────────────────────
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <MonthYearSelector
         year={year}
         month={month}
@@ -393,7 +395,7 @@ export default function MilkScreen() {
           automaticallyAdjustKeyboardInsets
         />
       )}
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
