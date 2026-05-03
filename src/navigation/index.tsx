@@ -1,5 +1,5 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, Platform, View } from 'react-native';
 import LoginScreen from '../screens/LoginScreen';
 import SummaryScreen from '../screens/SummaryScreen';
 import { useAuth } from '../store/AuthContext';
@@ -28,7 +28,7 @@ export default function RootNavigator() {
             name="Summary"
             component={SummaryScreen}
             options={{
-              presentation: 'modal',
+              presentation: Platform.OS === 'ios' ? 'modal' : 'card',
               headerShown: true,
               title: 'Report Summary',
               headerTitleStyle: { fontWeight: '600', fontSize: 17 },
