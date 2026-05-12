@@ -55,6 +55,16 @@ export const adminService = {
     }
   },
 
+  async getFarmReport(farmId: number, year: number, month: number): Promise<AdminReport | null> {
+    try {
+      const res = await apiClient.get(`/admin/farms/${farmId}/report`, { params: { year, month } });
+      return res.data.data;
+    } catch (err: any) {
+      if (err?.response?.status === 404) return null;
+      throw err;
+    }
+  },
+
   async getReport(reportId: number): Promise<AdminReport> {
     const res = await apiClient.get(`/admin/reports/${reportId}`);
     return res.data.data;

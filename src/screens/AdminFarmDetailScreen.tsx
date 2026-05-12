@@ -1,6 +1,6 @@
 import { Feather } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -32,6 +32,7 @@ import {
   AdminStackParamList,
   ServerExpense,
 } from '../types';
+import { useAuth } from '../store/AuthContext';
 
 type Props = NativeStackScreenProps<AdminStackParamList, 'AdminFarmDetail'>;
 
@@ -110,11 +111,12 @@ interface AdminExpenseRowProps {
   onViewReceipts?: (uris: string[]) => void;
   receiptUris?: string[];
   isSubmitted: boolean;
+  readOnly?: boolean;
 }
 
-function AdminExpenseRow({ expense, onEdit, onDelete, onViewReceipts, receiptUris = [], isSubmitted }: AdminExpenseRowProps) {
+function AdminExpenseRow({ expense, onEdit, onDelete, onViewReceipts, receiptUris = [], isSubmitted, readOnly = false }: AdminExpenseRowProps) {
   function renderRightActions() {
-    if (isSubmitted) return null;
+    if (isSubmitted || readOnly) return null;
     return (
       <TouchableOpacity style={styles.deleteAction} onPress={() => onDelete(expense)}>
         <Feather name="trash-2" size={18} color="#fff" />
@@ -127,8 +129,8 @@ function AdminExpenseRow({ expense, onEdit, onDelete, onViewReceipts, receiptUri
     <Swipeable renderRightActions={renderRightActions} overshootRight={false}>
       <TouchableOpacity
         style={styles.expenseRow}
-        onPress={() => !isSubmitted && onEdit(expense)}
-        activeOpacity={isSubmitted ? 1 : 0.7}
+        onPress={() => !isSubmitted && !readOnly && onEdit(expense)}
+        activeOpacity={isSubmitted || readOnly ? 1 : 0.7}
       >
         <View style={styles.entryBadge}>
           <Text style={styles.entryNo}>{expense.entryNo}</Text>
@@ -152,7 +154,7 @@ function AdminExpenseRow({ expense, onEdit, onDelete, onViewReceipts, receiptUri
           </TouchableOpacity>
         )}
         <Text style={styles.expenseCost}>{expense.cost.toFixed(2)}</Text>
-        {!isSubmitted && <Feather name="chevron-right" size={16} color="#ccc" style={{ marginLeft: 4 }} />}
+        {!isSubmitted && !readOnly && <Feather name="chevron-right" size={16} color="#ccc" style={{ marginLeft: 4 }} />}
       </TouchableOpacity>
     </Swipeable>
   );
@@ -173,8 +175,11 @@ function SectionHeader({ title, icon }: { title: string; icon: keyof typeof Feat
 
 export default function AdminFarmDetailScreen({ route, navigation }: Props) {
   const { farmId, farmName, reportId: initialReportId, year, month } = route.params;
+  const { user } = useAuth();
+  const isOpsManager = useMemo(() => user?.role === 'OPERATIONS_MANAGER', [user]);
 
   const [report,       setReport]       = useState<AdminReport | null>(null);
+  const [noReport,     setNoReport]     = useState(false);
   const [isLoading,    setIsLoading]    = useState(true);
   const [isSaving,     setIsSaving]     = useState(false);
   const [isExporting,  setIsExporting]  = useState(false);
@@ -191,7 +196,7 @@ export default function AdminFarmDetailScreen({ route, navigation }: Props) {
   useLayoutEffect(() => {
     navigation.setOptions({
       headerTitle: farmName,
-      headerRight: () => (
+      headerRight: isOpsManager ? undefined : () => (
         <TouchableOpacity
           style={styles.headerExportBtn}
           onPress={handleExport}
@@ -205,7 +210,7 @@ export default function AdminFarmDetailScreen({ route, navigation }: Props) {
         </TouchableOpacity>
       ),
     });
-  }, [farmName, isExporting, report]);
+  }, [farmName, isExporting, report, isOpsManager]);
 
   useEffect(() => {
     loadReport();
@@ -215,14 +220,17 @@ export default function AdminFarmDetailScreen({ route, navigation }: Props) {
 
   async function loadReport() {
     setIsLoading(true);
+    setNoReport(false);
     try {
-      let data: AdminReport;
       if (initialReportId) {
-        data = await adminService.getReport(initialReportId);
+        setReport(await adminService.getReport(initialReportId));
+      } else if (isOpsManager) {
+        const data = await adminService.getFarmReport(farmId, year, month);
+        if (data === null) setNoReport(true);
+        else setReport(data);
       } else {
-        data = await adminService.getOrCreateReport(farmId, year, month);
+        setReport(await adminService.getOrCreateReport(farmId, year, month));
       }
-      setReport(data);
     } catch {
       Alert.alert('Error', 'Failed to load report data.');
     } finally {
@@ -405,6 +413,15 @@ export default function AdminFarmDetailScreen({ route, navigation }: Props) {
     );
   }
 
+  if (noReport) {
+    return (
+      <View style={styles.centered}>
+        <Feather name="file" size={40} color="#ccc" />
+        <Text style={styles.noReportText}>No report started for {MONTHS[month - 1]} {year}</Text>
+      </View>
+    );
+  }
+
   if (!report) {
     return (
       <View style={styles.centered}>
@@ -453,35 +470,37 @@ export default function AdminFarmDetailScreen({ route, navigation }: Props) {
             </Text>
           </View>
         </View>
-        <View style={styles.actionBtns}>
-          {isSubmitted ? (
-            <TouchableOpacity
-              style={[styles.actionBtn, styles.reopenBtn, isSaving && styles.actionBtnDisabled]}
-              onPress={handleReopen}
-              disabled={isSaving}
-            >
-              {isSaving ? <ActivityIndicator size="small" color="#fff" /> : (
-                <>
-                  <Feather name="unlock" size={14} color="#fff" />
-                  <Text style={styles.actionBtnText}>Reopen</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              style={[styles.actionBtn, styles.submitBtn, isSaving && styles.actionBtnDisabled]}
-              onPress={handleSubmit}
-              disabled={isSaving}
-            >
-              {isSaving ? <ActivityIndicator size="small" color="#fff" /> : (
-                <>
-                  <Feather name="check-circle" size={14} color="#fff" />
-                  <Text style={styles.actionBtnText}>Submit</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          )}
-        </View>
+        {!isOpsManager && (
+          <View style={styles.actionBtns}>
+            {isSubmitted ? (
+              <TouchableOpacity
+                style={[styles.actionBtn, styles.reopenBtn, isSaving && styles.actionBtnDisabled]}
+                onPress={handleReopen}
+                disabled={isSaving}
+              >
+                {isSaving ? <ActivityIndicator size="small" color="#fff" /> : (
+                  <>
+                    <Feather name="unlock" size={14} color="#fff" />
+                    <Text style={styles.actionBtnText}>Reopen</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[styles.actionBtn, styles.submitBtn, isSaving && styles.actionBtnDisabled]}
+                onPress={handleSubmit}
+                disabled={isSaving}
+              >
+                {isSaving ? <ActivityIndicator size="small" color="#fff" /> : (
+                  <>
+                    <Feather name="check-circle" size={14} color="#fff" />
+                    <Text style={styles.actionBtnText}>Submit</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
@@ -551,6 +570,7 @@ export default function AdminFarmDetailScreen({ route, navigation }: Props) {
                 receiptUris={receiptMap[exp.id] ?? []}
                 onViewReceipts={uris => { setReceiptUris(uris); setReceiptIdx(0); }}
                 isSubmitted={isSubmitted}
+                readOnly={isOpsManager}
               />
             ))
         )}
@@ -559,7 +579,7 @@ export default function AdminFarmDetailScreen({ route, navigation }: Props) {
       </ScrollView>
 
       {/* FAB: add expense */}
-      {!isSubmitted && (
+      {!isSubmitted && !isOpsManager && (
         <TouchableOpacity
           style={styles.fab}
           onPress={() => { setEditingExpense(null); setFormVisible(true); }}
@@ -612,8 +632,9 @@ export default function AdminFarmDetailScreen({ route, navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f7f9' },
-  centered:  { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  errorText: { marginTop: 12, color: '#e53e3e', textAlign: 'center', fontSize: 14 },
+  centered:    { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  errorText:   { marginTop: 12, color: '#e53e3e', textAlign: 'center', fontSize: 14 },
+  noReportText:{ marginTop: 16, color: '#999', textAlign: 'center', fontSize: 15 },
   retryBtn:  { marginTop: 16, paddingHorizontal: 24, paddingVertical: 10, backgroundColor: '#2d6a4f', borderRadius: 8 },
   retryText: { color: '#fff', fontWeight: '600', fontSize: 14 },
   scroll:    { padding: 16 },

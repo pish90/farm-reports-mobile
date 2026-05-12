@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import MonthYearSelector from '../components/shared/MonthYearSelector';
 import { adminService } from '../services/adminService';
+import { useAuth } from '../store/AuthContext';
 import { AdminStackParamList, FarmLiveStatus } from '../types';
 
 type Nav = NativeStackNavigationProp<AdminStackParamList, 'AdminDashboard'>;
@@ -51,9 +52,10 @@ interface FarmCardProps {
   onPress: () => void;
   onReopen: () => void;
   reopening: boolean;
+  isOpsManager: boolean;
 }
 
-function FarmCard({ farm, onPress, onReopen, reopening }: FarmCardProps) {
+function FarmCard({ farm, onPress, onReopen, reopening, isOpsManager }: FarmCardProps) {
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.85}>
       <View style={styles.cardHeader}>
@@ -77,9 +79,9 @@ function FarmCard({ farm, onPress, onReopen, reopening }: FarmCardProps) {
 
       <View style={styles.cardFooter}>
         <Text style={styles.tapHint}>
-          <Feather name="chevron-right" size={12} color="#aaa" /> Tap to view / edit
+          <Feather name="chevron-right" size={12} color="#aaa" /> {isOpsManager ? 'Tap to view' : 'Tap to view / edit'}
         </Text>
-        {farm.reportStatus === 'SUBMITTED' && (
+        {farm.reportStatus === 'SUBMITTED' && !isOpsManager && (
           <TouchableOpacity
             style={[styles.reopenBtn, reopening && styles.reopenBtnDisabled]}
             onPress={onReopen}
@@ -102,6 +104,8 @@ function FarmCard({ farm, onPress, onReopen, reopening }: FarmCardProps) {
 
 export default function AdminDashboardScreen() {
   const navigation = useNavigation<Nav>();
+  const { user } = useAuth();
+  const isOpsManager = user?.role === 'OPERATIONS_MANAGER';
   const now = new Date();
   const [year,  setYear]  = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -218,6 +222,7 @@ export default function AdminDashboardScreen() {
             <FarmCard
               key={farm.farmId}
               farm={farm}
+              isOpsManager={isOpsManager}
               onPress={() => navigation.navigate('AdminFarmDetail', {
                 farmId: farm.farmId,
                 farmName: farm.farmName,
