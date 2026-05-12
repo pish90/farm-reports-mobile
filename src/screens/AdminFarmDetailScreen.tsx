@@ -589,17 +589,19 @@ export default function AdminFarmDetailScreen({ route, navigation }: Props) {
         </TouchableOpacity>
       )}
 
-      <ExpenseForm
-        visible={formVisible}
-        year={year}
-        month={month}
-        initial={editingExpense ? serverExpenseToFormValues(editingExpense, receiptMap[editingExpense.id] ?? []) : undefined}
-        isEditing={!!editingExpense}
-        categories={categories}
-        businessUnits={businessUnits}
-        onSave={handleSaveExpense}
-        onCancel={() => setFormVisible(false)}
-      />
+      {!isOpsManager && (
+        <ExpenseForm
+          visible={formVisible}
+          year={year}
+          month={month}
+          initial={editingExpense ? serverExpenseToFormValues(editingExpense, receiptMap[editingExpense.id] ?? []) : undefined}
+          isEditing={!!editingExpense}
+          categories={categories}
+          businessUnits={businessUnits}
+          onSave={handleSaveExpense}
+          onCancel={() => setFormVisible(false)}
+        />
+      )}
 
       <Modal visible={receiptUris.length > 0} transparent animationType="fade" onRequestClose={() => setReceiptUris([])}>
         <View style={styles.receiptOverlay}>
