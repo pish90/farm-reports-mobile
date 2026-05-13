@@ -1,12 +1,16 @@
 import { Feather } from '@expo/vector-icons';
+import * as FileSystem from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import {
+  Alert,
   Image,
   Keyboard,
   KeyboardAvoidingView,
+  Linking,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -112,7 +116,7 @@ interface DropdownProps<T> {
 function Dropdown<T>({ title, items, getKey, getLabel, onSelect, onClose }: DropdownProps<T>) {
   return (
     <>
-      <Pressable style={styles.backdrop} onPress={onClose} />
+      <Pressable style={styles.dropdownBackdrop} onPress={onClose} />
       <View style={styles.dropdownSheet}>
         <View style={styles.handle} />
         <Text style={styles.dropdownTitle}>{title}</Text>
@@ -143,6 +147,7 @@ export default function ExpenseForm({ visible, year, month, initial, isEditing, 
   const [showCatPicker, setShowCatPicker] = useState(false);
   const [showBuPicker,  setShowBuPicker]  = useState(false);
   const [showApportBuPicker, setShowApportBuPicker] = useState<number | null>(null);
+  const [previewUri, setPreviewUri] = useState<string | null>(null);
 
   const { control, handleSubmit, reset, setValue, formState: { errors } } =
     useForm<ExpenseFormValues>({ defaultValues: EMPTY });
@@ -213,12 +218,37 @@ export default function ExpenseForm({ visible, year, month, initial, isEditing, 
     const perm = source === 'camera'
       ? await ImagePicker.requestCameraPermissionsAsync()
       : await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) return;
+    if (!perm.granted) {
+      const label = source === 'camera' ? 'camera' : 'photo library';
+      Alert.alert(
+        'Permission Required',
+        `Allow Farm Reports to access your ${label} in Settings.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Open Settings', onPress: () => Linking.openSettings() },
+        ],
+      );
+      return;
+    }
     const result = source === 'camera'
       ? await ImagePicker.launchCameraAsync({ quality: 0.7, allowsEditing: true })
       : await ImagePicker.launchImageLibraryAsync({ quality: 0.7, allowsEditing: true, mediaTypes: 'images' });
     if (!result.canceled && result.assets[0]) {
-      setValue('receipt_image_uris', [...(watchedReceiptUris ?? []), result.assets[0].uri]);
+      const srcUri = result.assets[0].uri;
+      let savedUri = srcUri;
+      try {
+        const docDir = FileSystem.documentDirectory;
+        if (docDir) {
+          const dir = `${docDir}receipts/`;
+          const destUri = `${dir}receipt_${Date.now()}.jpg`;
+          await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+          await FileSystem.copyAsync({ from: srcUri, to: destUri });
+          savedUri = destUri;
+        }
+      } catch {
+        // copy failed — fall back to the picker URI which still works for this session
+      }
+      setValue('receipt_image_uris', [...(watchedReceiptUris ?? []), savedUri]);
     }
   }
 
@@ -228,8 +258,16 @@ export default function ExpenseForm({ visible, year, month, initial, isEditing, 
 
   const anyPickerOpen = showCatPicker || showBuPicker || showApportBuPicker !== null;
 
+  function handleRequestClose() {
+    if (previewUri) { setPreviewUri(null); return; }
+    if (showApportBuPicker !== null) { setShowApportBuPicker(null); return; }
+    if (showBuPicker) { setShowBuPicker(false); return; }
+    if (showCatPicker) { setShowCatPicker(false); return; }
+    onCancel();
+  }
+
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={handleRequestClose}>
       <Pressable
         style={styles.backdrop}
         onPress={onCancel}
@@ -237,6 +275,7 @@ export default function ExpenseForm({ visible, year, month, initial, isEditing, 
       />
       <KeyboardAvoidingView
         behavior="padding"
+        enabled={Platform.OS === 'ios'}
         style={styles.kvWrap}
         pointerEvents="box-none"
       >
@@ -413,7 +452,9 @@ export default function ExpenseForm({ visible, year, month, initial, isEditing, 
                 <View style={styles.thumbRow}>
                   {watchedReceiptUris.map((uri, idx) => (
                     <View key={idx} style={styles.receiptPreview}>
-                      <Image source={{ uri }} style={styles.receiptThumb} />
+                      <TouchableOpacity onPress={() => setPreviewUri(uri)} activeOpacity={0.85}>
+                        <Image source={{ uri }} style={styles.receiptThumb} />
+                      </TouchableOpacity>
                       <TouchableOpacity
                         style={styles.receiptRemoveBtn}
                         onPress={() => removeReceiptAt(idx)}
@@ -502,6 +543,19 @@ export default function ExpenseForm({ visible, year, month, initial, isEditing, 
           onClose={() => setShowApportBuPicker(null)}
         />
       )}
+
+      {/* Full-screen receipt preview */}
+      {previewUri && (
+        <>
+          <Pressable style={styles.previewBackdrop} onPress={() => setPreviewUri(null)} />
+          <View style={styles.previewContainer} pointerEvents="box-none">
+            <Image source={{ uri: previewUri }} style={styles.previewImage} resizeMode="contain" />
+            <TouchableOpacity style={styles.previewCloseBtn} onPress={() => setPreviewUri(null)}>
+              <Feather name="x" size={20} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        </>
+      )}
     </Modal>
   );
 }
@@ -581,10 +635,18 @@ const styles = StyleSheet.create({
   pctTotal:   { fontSize: 13, color: '#555' },
   pctWarning: { color: '#e53e3e', fontWeight: '600' },
 
+  dropdownBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    zIndex: 50,
+    elevation: 10,
+  },
   dropdownSheet: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
     backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20,
     maxHeight: '70%', paddingHorizontal: 0, paddingBottom: 16,
+    zIndex: 100,
+    elevation: 20,
   },
   dropdownTitle: {
     fontSize: 16, fontWeight: '700', color: '#1a1a1a',
@@ -623,5 +685,18 @@ const styles = StyleSheet.create({
     position: 'absolute', top: -6, right: -6,
     width: 20, height: 20, borderRadius: 10,
     backgroundColor: '#e53e3e', alignItems: 'center', justifyContent: 'center',
+  },
+
+  previewBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.92)' },
+  previewContainer: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  previewImage: { width: '100%', height: '80%' },
+  previewCloseBtn: {
+    position: 'absolute', top: 48, right: 20,
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center', justifyContent: 'center',
   },
 });
