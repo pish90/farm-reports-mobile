@@ -274,8 +274,7 @@ export default function ExpenseForm({ visible, year, month, initial, isEditing, 
         pointerEvents={anyPickerOpen ? 'none' : 'auto'}
       />
       <KeyboardAvoidingView
-        behavior="padding"
-        enabled={Platform.OS === 'ios'}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.kvWrap}
         pointerEvents="box-none"
       >
@@ -492,56 +491,76 @@ export default function ExpenseForm({ visible, year, month, initial, isEditing, 
         </View>
       </KeyboardAvoidingView>
 
-      {/* Pickers rendered inside the same Modal — fixes iOS sibling Modal touch bug */}
-      {showCatPicker && (
-        <Dropdown
-          title="Select Category"
-          items={categories}
-          getKey={(c) => String(c.id)}
-          getLabel={(c) => `${c.accountCode} – ${c.accountName}`}
-          onSelect={(c) => {
-            setValue('category_id', c.id);
-            setValue('category_code', c.accountCode);
-            setValue('category_name', c.accountName);
-          }}
-          onClose={() => setShowCatPicker(false)}
-        />
-      )}
-
-      {showBuPicker && (
-        <Dropdown
-          title="Select Business Unit"
-          items={businessUnits}
-          getKey={(b) => String(b.id)}
-          getLabel={(b) => `${b.code} – ${b.name}`}
-          onSelect={(b) => {
-            setValue('business_unit_id', b.id);
-            setValue('business_unit_code', b.code);
-            setValue('business_unit_name', b.name);
-            if (b.code !== SHARED_BU_CODE) setValue('apportionments', []);
-          }}
-          onClose={() => setShowBuPicker(false)}
-        />
-      )}
-
-      {showApportBuPicker !== null && (
-        <Dropdown
-          title="Select Business Unit"
-          items={nonSharedUnits}
-          getKey={(b) => String(b.id)}
-          getLabel={(b) => `${b.code} – ${b.name}`}
-          onSelect={(b) => {
-            const updated = [...(watchedApportionments ?? [])];
-            updated[showApportBuPicker!] = {
-              ...updated[showApportBuPicker!],
-              business_unit_id: b.id,
-              business_unit_code: b.code,
-              business_unit_name: b.name,
-            };
-            setValue('apportionments', updated);
-          }}
-          onClose={() => setShowApportBuPicker(null)}
-        />
+      {/* iOS: pickers inside same Modal (avoids sibling-Modal touch bug on iOS)
+          Android: pickers in own Modals (avoids touch-bleed and z-order issues) */}
+      {Platform.OS === 'ios' ? (
+        <>
+          {showCatPicker && (
+            <Dropdown
+              title="Select Category"
+              items={categories}
+              getKey={(c) => String(c.id)}
+              getLabel={(c) => `${c.accountCode} – ${c.accountName}`}
+              onSelect={(c) => { setValue('category_id', c.id); setValue('category_code', c.accountCode); setValue('category_name', c.accountName); }}
+              onClose={() => setShowCatPicker(false)}
+            />
+          )}
+          {showBuPicker && (
+            <Dropdown
+              title="Select Business Unit"
+              items={businessUnits}
+              getKey={(b) => String(b.id)}
+              getLabel={(b) => `${b.code} – ${b.name}`}
+              onSelect={(b) => { setValue('business_unit_id', b.id); setValue('business_unit_code', b.code); setValue('business_unit_name', b.name); if (b.code !== SHARED_BU_CODE) setValue('apportionments', []); }}
+              onClose={() => setShowBuPicker(false)}
+            />
+          )}
+          {showApportBuPicker !== null && (
+            <Dropdown
+              title="Select Business Unit"
+              items={nonSharedUnits}
+              getKey={(b) => String(b.id)}
+              getLabel={(b) => `${b.code} – ${b.name}`}
+              onSelect={(b) => { const updated = [...(watchedApportionments ?? [])]; updated[showApportBuPicker!] = { ...updated[showApportBuPicker!], business_unit_id: b.id, business_unit_code: b.code, business_unit_name: b.name }; setValue('apportionments', updated); }}
+              onClose={() => setShowApportBuPicker(null)}
+            />
+          )}
+        </>
+      ) : (
+        <>
+          <Modal visible={showCatPicker} transparent animationType="slide" onRequestClose={() => setShowCatPicker(false)}>
+            <Dropdown
+              title="Select Category"
+              items={categories}
+              getKey={(c) => String(c.id)}
+              getLabel={(c) => `${c.accountCode} – ${c.accountName}`}
+              onSelect={(c) => { setValue('category_id', c.id); setValue('category_code', c.accountCode); setValue('category_name', c.accountName); }}
+              onClose={() => setShowCatPicker(false)}
+            />
+          </Modal>
+          <Modal visible={showBuPicker} transparent animationType="slide" onRequestClose={() => setShowBuPicker(false)}>
+            <Dropdown
+              title="Select Business Unit"
+              items={businessUnits}
+              getKey={(b) => String(b.id)}
+              getLabel={(b) => `${b.code} – ${b.name}`}
+              onSelect={(b) => { setValue('business_unit_id', b.id); setValue('business_unit_code', b.code); setValue('business_unit_name', b.name); if (b.code !== SHARED_BU_CODE) setValue('apportionments', []); }}
+              onClose={() => setShowBuPicker(false)}
+            />
+          </Modal>
+          <Modal visible={showApportBuPicker !== null} transparent animationType="slide" onRequestClose={() => setShowApportBuPicker(null)}>
+            {showApportBuPicker !== null && (
+              <Dropdown
+                title="Select Business Unit"
+                items={nonSharedUnits}
+                getKey={(b) => String(b.id)}
+                getLabel={(b) => `${b.code} – ${b.name}`}
+                onSelect={(b) => { const updated = [...(watchedApportionments ?? [])]; updated[showApportBuPicker!] = { ...updated[showApportBuPicker!], business_unit_id: b.id, business_unit_code: b.code, business_unit_name: b.name }; setValue('apportionments', updated); }}
+                onClose={() => setShowApportBuPicker(null)}
+              />
+            )}
+          </Modal>
+        </>
       )}
 
       {/* Full-screen receipt preview */}
