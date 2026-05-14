@@ -570,7 +570,7 @@ export default function AdminFarmDetailScreen({ route, navigation }: Props) {
                 receiptUris={receiptMap[exp.id] ?? []}
                 onViewReceipts={uris => { setReceiptUris(uris); setReceiptIdx(0); }}
                 isSubmitted={isSubmitted}
-                readOnly={isOpsManager}
+                readOnly={false}
               />
             ))
         )}
@@ -579,7 +579,7 @@ export default function AdminFarmDetailScreen({ route, navigation }: Props) {
       </ScrollView>
 
       {/* FAB: add expense */}
-      {!isSubmitted && !isOpsManager && (
+      {!isSubmitted && (
         <TouchableOpacity
           style={styles.fab}
           onPress={() => { setEditingExpense(null); setFormVisible(true); }}
@@ -589,19 +589,17 @@ export default function AdminFarmDetailScreen({ route, navigation }: Props) {
         </TouchableOpacity>
       )}
 
-      {!isOpsManager && (
-        <ExpenseForm
-          visible={formVisible}
-          year={year}
-          month={month}
-          initial={editingExpense ? serverExpenseToFormValues(editingExpense, receiptMap[editingExpense.id] ?? []) : undefined}
-          isEditing={!!editingExpense}
-          categories={categories}
-          businessUnits={businessUnits}
-          onSave={handleSaveExpense}
-          onCancel={() => setFormVisible(false)}
-        />
-      )}
+      <ExpenseForm
+        visible={formVisible}
+        year={year}
+        month={month}
+        initial={editingExpense ? serverExpenseToFormValues(editingExpense, receiptMap[editingExpense.id] ?? []) : undefined}
+        isEditing={!!editingExpense}
+        categories={categories}
+        businessUnits={businessUnits}
+        onSave={handleSaveExpense}
+        onCancel={() => setFormVisible(false)}
+      />
 
       <Modal visible={receiptUris.length > 0} transparent animationType="fade" onRequestClose={() => setReceiptUris([])}>
         <View style={styles.receiptOverlay}>
