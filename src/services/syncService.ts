@@ -45,14 +45,19 @@ async function syncSection(
   if (!full) return;
 
   switch (entry.section) {
-    case 'attendance':
-      await apiClient.put(`/reports/${serverReportId}/attendance`, full.attendance.map((a) => ({
-        workerId: a.worker_id,
-        dayOfMonth: a.day_of_month,
-        present: a.present === 1,
-        notes: a.notes ?? null,
-      })));
+    case 'attendance': {
+      await apiClient.put(`/reports/${serverReportId}/attendance`, full.attendance.map((a) => {
+        const status = a.status ?? (a.present === 1 ? 'P' : 'A');
+        return {
+          workerId: a.worker_id,
+          dayOfMonth: a.day_of_month,
+          present: status === 'P',
+          status,
+          notes: a.notes ?? null,
+        };
+      }));
       break;
+    }
 
     case 'livestock':
       await apiClient.put(`/reports/${serverReportId}/livestock`, full.livestock.map((l) => ({
@@ -186,11 +191,17 @@ export function initAutoSync(): () => void {
 
   const netInfoUnsub = trySubscribeNetInfo();
 
+  // Periodic sync every 30 seconds while the app is running
+  const intervalId = setInterval(() => {
+    syncAllPending().catch(() => {});
+  }, 30_000);
+
   // Trigger an initial sync immediately
   syncAllPending().catch(() => {});
 
   return () => {
     appStateSub.remove();
     netInfoUnsub?.();
+    clearInterval(intervalId);
   };
 }

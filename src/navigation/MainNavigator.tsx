@@ -93,6 +93,7 @@ function ExpensesNavigator() {
 export default function MainNavigator() {
   const { user } = useAuth();
   const isAdmin      = user?.role === 'ADMIN';
+  const isManager    = user?.role === 'MANAGER';
   const isOpsManager = user?.role === 'OPERATIONS_MANAGER';
   const showFarmTabs = !isOpsManager;
 
@@ -126,7 +127,7 @@ export default function MainNavigator() {
             Livestock:  'tag',
             Milk:       'droplet',
             Expenses:   'dollar-sign',
-            Admin:      isOpsManager ? 'dollar-sign' : 'grid',
+            Admin:      isOpsManager ? 'dollar-sign' : isManager ? 'clipboard' : 'grid',
             Settings:   'settings',
           };
           return <Feather name={icons[route.name] ?? 'circle'} size={size} color={color} />;
@@ -137,13 +138,13 @@ export default function MainNavigator() {
       {showFarmTabs && <Tab.Screen name="Livestock"  component={LivestockNavigator} />}
       {showFarmTabs && <Tab.Screen name="Milk"       component={MilkNavigator} />}
       {showFarmTabs && <Tab.Screen name="Expenses"   component={ExpensesNavigator} />}
-      {(isAdmin || isOpsManager) && (
+      {(isAdmin || isManager || isOpsManager) && (
         <Tab.Screen
           name="Admin"
           component={AdminNavigator}
           options={{
             headerShown: false,
-            tabBarLabel: isOpsManager ? 'Expenses' : 'Admin',
+            tabBarLabel: isOpsManager ? 'Farms' : isManager ? 'My Report' : 'Admin',
           }}
         />
       )}

@@ -106,6 +106,7 @@ export default function AdminDashboardScreen() {
   const navigation = useNavigation<Nav>();
   const { user } = useAuth();
   const isOpsManager = user?.role === 'OPERATIONS_MANAGER';
+  const isManager    = user?.role === 'MANAGER';
   const now = new Date();
   const [year,  setYear]  = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -121,7 +122,8 @@ export default function AdminDashboardScreen() {
     if (refresh) setIsRefreshing(true); else setIsLoading(true);
     setError(null);
     try {
-      setFarms(await adminService.getFarmLiveStatus(y, m));
+      const all = await adminService.getFarmLiveStatus(y, m);
+      setFarms(isManager && user?.farmId ? all.filter(f => f.farmId === user.farmId) : all);
     } catch {
       setError('Failed to load farm status. Check your connection.');
     } finally {
@@ -163,21 +165,23 @@ export default function AdminDashboardScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.topBar}>
-        <Text style={styles.title}>Farm Overview</Text>
-        <TouchableOpacity
-          style={[styles.exportBtn, isExporting && styles.exportBtnDisabled]}
-          onPress={handleExport}
-          disabled={isExporting}
-        >
-          {isExporting ? (
-            <ActivityIndicator size="small" color="#2d6a4f" />
-          ) : (
-            <>
-              <Feather name="download" size={16} color="#2d6a4f" />
-              <Text style={styles.exportBtnText}>Excel</Text>
-            </>
-          )}
-        </TouchableOpacity>
+        <Text style={styles.title}>{isManager ? 'My Farm Report' : 'Farm Overview'}</Text>
+        {!isManager && (
+          <TouchableOpacity
+            style={[styles.exportBtn, isExporting && styles.exportBtnDisabled]}
+            onPress={handleExport}
+            disabled={isExporting}
+          >
+            {isExporting ? (
+              <ActivityIndicator size="small" color="#2d6a4f" />
+            ) : (
+              <>
+                <Feather name="download" size={16} color="#2d6a4f" />
+                <Text style={styles.exportBtnText}>Excel</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        )}
       </View>
 
       <MonthYearSelector year={year} month={month} onChange={(y, m) => { setYear(y); setMonth(m); }} />

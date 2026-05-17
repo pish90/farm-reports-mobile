@@ -177,6 +177,7 @@ export default function AdminFarmDetailScreen({ route, navigation }: Props) {
   const { farmId, farmName, reportId: initialReportId, year, month } = route.params;
   const { user } = useAuth();
   const isOpsManager = useMemo(() => user?.role === 'OPERATIONS_MANAGER', [user]);
+  const isManager    = useMemo(() => user?.role === 'MANAGER', [user]);
 
   const [report,       setReport]       = useState<AdminReport | null>(null);
   const [noReport,     setNoReport]     = useState(false);
@@ -196,7 +197,7 @@ export default function AdminFarmDetailScreen({ route, navigation }: Props) {
   useLayoutEffect(() => {
     navigation.setOptions({
       headerTitle: farmName,
-      headerRight: isOpsManager ? undefined : () => (
+      headerRight: (isOpsManager || isManager) ? undefined : () => (
         <TouchableOpacity
           style={styles.headerExportBtn}
           onPress={handleExport}
@@ -473,18 +474,20 @@ export default function AdminFarmDetailScreen({ route, navigation }: Props) {
         {!isOpsManager && (
           <View style={styles.actionBtns}>
             {isSubmitted ? (
-              <TouchableOpacity
-                style={[styles.actionBtn, styles.reopenBtn, isSaving && styles.actionBtnDisabled]}
-                onPress={handleReopen}
-                disabled={isSaving}
-              >
-                {isSaving ? <ActivityIndicator size="small" color="#fff" /> : (
-                  <>
-                    <Feather name="unlock" size={14} color="#fff" />
-                    <Text style={styles.actionBtnText}>Reopen</Text>
-                  </>
-                )}
-              </TouchableOpacity>
+              !isManager && (
+                <TouchableOpacity
+                  style={[styles.actionBtn, styles.reopenBtn, isSaving && styles.actionBtnDisabled]}
+                  onPress={handleReopen}
+                  disabled={isSaving}
+                >
+                  {isSaving ? <ActivityIndicator size="small" color="#fff" /> : (
+                    <>
+                      <Feather name="unlock" size={14} color="#fff" />
+                      <Text style={styles.actionBtnText}>Reopen</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              )
             ) : (
               <TouchableOpacity
                 style={[styles.actionBtn, styles.submitBtn, isSaving && styles.actionBtnDisabled]}
