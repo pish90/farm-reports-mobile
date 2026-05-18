@@ -41,6 +41,7 @@
         "projectId": "bdb6a038-448e-4bd1-977a-b5da6a662739"
       }
     },
+    "privacy": "public",
     "owner": "pklife",
     "runtimeVersion": "exposdk:54.0.0",
     "updates": {
