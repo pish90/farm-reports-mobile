@@ -1,5 +1,6 @@
 export type RootStackParamList = {
   Login: undefined;
+  ChangePassword: undefined;
   Main: undefined;
   Summary: undefined;
 };
@@ -12,6 +13,10 @@ export type AdminStackParamList = {
     reportId: number | null;
     year: number;
     month: number;
+  };
+  Workers: {
+    farmId: number;
+    farmName: string;
   };
 };
 
@@ -124,4 +129,5 @@ export interface CurrentUser {
   farmName: string | null;
   userName: string;
   role: string;
+  mustChangePassword: boolean;
 }

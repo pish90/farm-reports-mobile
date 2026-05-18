@@ -51,11 +51,12 @@ interface FarmCardProps {
   farm: FarmLiveStatus;
   onPress: () => void;
   onReopen: () => void;
+  onManageWorkers?: () => void;
   reopening: boolean;
   isOpsManager: boolean;
 }
 
-function FarmCard({ farm, onPress, onReopen, reopening, isOpsManager }: FarmCardProps) {
+function FarmCard({ farm, onPress, onReopen, onManageWorkers, reopening, isOpsManager }: FarmCardProps) {
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.85}>
       <View style={styles.cardHeader}>
@@ -81,22 +82,30 @@ function FarmCard({ farm, onPress, onReopen, reopening, isOpsManager }: FarmCard
         <Text style={styles.tapHint}>
           <Feather name="chevron-right" size={12} color="#aaa" /> {isOpsManager ? 'Tap to view' : 'Tap to view / edit'}
         </Text>
-        {farm.reportStatus === 'SUBMITTED' && !isOpsManager && (
-          <TouchableOpacity
-            style={[styles.reopenBtn, reopening && styles.reopenBtnDisabled]}
-            onPress={onReopen}
-            disabled={reopening}
-          >
-            {reopening ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <>
-                <Feather name="unlock" size={13} color="#fff" />
-                <Text style={styles.reopenBtnText}>Reopen</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        )}
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          {onManageWorkers && (
+            <TouchableOpacity style={styles.workersBtn} onPress={onManageWorkers}>
+              <Feather name="users" size={13} color="#2d6a4f" />
+              <Text style={styles.workersBtnText}>Workers</Text>
+            </TouchableOpacity>
+          )}
+          {farm.reportStatus === 'SUBMITTED' && !isOpsManager && (
+            <TouchableOpacity
+              style={[styles.reopenBtn, reopening && styles.reopenBtnDisabled]}
+              onPress={onReopen}
+              disabled={reopening}
+            >
+              {reopening ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <>
+                  <Feather name="unlock" size={13} color="#fff" />
+                  <Text style={styles.reopenBtnText}>Reopen</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
     </TouchableOpacity>
   );
@@ -107,6 +116,7 @@ export default function AdminDashboardScreen() {
   const { user } = useAuth();
   const isOpsManager = user?.role === 'OPERATIONS_MANAGER';
   const isManager    = user?.role === 'MANAGER';
+  const isAdmin      = user?.role === 'ADMIN';
   const now = new Date();
   const [year,  setYear]  = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -236,6 +246,10 @@ export default function AdminDashboardScreen() {
               })}
               onReopen={() => handleReopen(farm)}
               reopening={reopeningId === farm.farmId}
+              onManageWorkers={isAdmin ? () => navigation.navigate('Workers', {
+                farmId: farm.farmId,
+                farmName: farm.farmName,
+              }) : undefined}
             />
           ))}
 
@@ -301,6 +315,13 @@ const styles = StyleSheet.create({
   },
   reopenBtnDisabled: { opacity: 0.6 },
   reopenBtnText: { color: '#fff', fontSize: 12, fontWeight: '600' },
+
+  workersBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    borderWidth: 1, borderColor: '#2d6a4f',
+    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16,
+  },
+  workersBtnText: { color: '#2d6a4f', fontSize: 12, fontWeight: '600' },
 
   retryBtn:  { marginTop: 16, paddingHorizontal: 24, paddingVertical: 10, backgroundColor: '#2d6a4f', borderRadius: 8 },
   retryText: { color: '#fff', fontWeight: '600', fontSize: 14 },

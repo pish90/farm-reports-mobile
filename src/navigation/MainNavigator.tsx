@@ -37,6 +37,16 @@ function AdminNavigator() {
           headerTintColor: '#2d6a4f',
         }}
       />
+      <AdminStack.Screen
+        name="Workers"
+        component={WorkersScreen}
+        options={({ route }) => ({
+          headerShown: true,
+          title: `${(route.params as { farmName: string }).farmName} — Workers`,
+          headerTitleStyle: { fontWeight: '600', fontSize: 17 },
+          headerTintColor: '#2d6a4f',
+        })}
+      />
     </AdminStack.Navigator>
   );
 }
@@ -95,7 +105,7 @@ export default function MainNavigator() {
   const isAdmin      = user?.role === 'ADMIN';
   const isManager    = user?.role === 'MANAGER';
   const isOpsManager = user?.role === 'OPERATIONS_MANAGER';
-  const showFarmTabs = !isOpsManager;
+  const showFarmTabs = !isAdmin && !isOpsManager;
 
   function openSummary() {
     if (navigationRef.isReady()) {
@@ -110,8 +120,8 @@ export default function MainNavigator() {
         headerTitleStyle: { fontWeight: '600', fontSize: 17 },
         headerRight: () => (
           <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 12, gap: 4 }}>
-            {!isOpsManager && <SyncStatusBadge />}
-            {!isOpsManager && (
+            {!isAdmin && !isOpsManager && <SyncStatusBadge />}
+            {!isAdmin && !isOpsManager && (
               <TouchableOpacity onPress={openSummary} style={{ padding: 4 }} hitSlop={8}>
                 <Feather name="clipboard" size={20} color="#2d6a4f" />
               </TouchableOpacity>

@@ -1,4 +1,5 @@
 import { Feather } from '@expo/vector-icons';
+import { useRoute } from '@react-navigation/native';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -178,6 +179,9 @@ const modalStyles = StyleSheet.create({
 
 export default function WorkersScreen() {
   const { user } = useAuth();
+  const route = useRoute();
+  const routeParams = route.params as { farmId?: number } | undefined;
+  const farmId = routeParams?.farmId ?? user?.farmId!;
 
   const [workers,    setWorkers]    = useState<WorkerDto[]>([]);
   const [isLoaded,   setIsLoaded]   = useState(false);
@@ -185,27 +189,27 @@ export default function WorkersScreen() {
   const [modalVisible, setModalVisible] = useState(false);
 
   const load = useCallback(async () => {
-    if (!user) return;
+    if (!farmId) return;
     setIsLoaded(false);
     setLoadError(null);
     try {
-      const ws = await getWorkers(user.farmId!);
+      const ws = await getWorkers(farmId);
       setWorkers(ws);
     } catch (e: any) {
       setLoadError(e.message ?? 'Failed to load workers');
     } finally {
       setIsLoaded(true);
     }
-  }, [user?.farmId]);
+  }, [farmId]);
 
   useEffect(() => { load(); }, [load]);
 
   const handleAdd = useCallback(async (name: string) => {
-    if (!user) return;
-    await addWorker(user.farmId!, name);
+    if (!farmId) return;
+    await addWorker(farmId, name);
     setModalVisible(false);
     await load();
-  }, [user?.farmId, load]);
+  }, [farmId, load]);
 
   const handleDelete = useCallback((worker: WorkerDto) => {
     Alert.alert(
@@ -217,9 +221,9 @@ export default function WorkersScreen() {
           text: 'Remove',
           style: 'destructive',
           onPress: async () => {
-            if (!user) return;
+            if (!farmId) return;
             try {
-              await deactivateWorker(user.farmId!, worker.id);
+              await deactivateWorker(farmId, worker.id);
               await load();
             } catch {
               Alert.alert('Error', 'Failed to remove worker. Please try again.');
@@ -228,7 +232,7 @@ export default function WorkersScreen() {
         },
       ],
     );
-  }, [user?.farmId, load]);
+  }, [farmId, load]);
 
   const renderItem = useCallback(
     ({ item }: { item: WorkerDto }) => (

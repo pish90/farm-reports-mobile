@@ -28,8 +28,25 @@ import { WorkerDto, getWorkers } from '../services/workerService';
 import { useAuth } from '../store/AuthContext';
 import { AttendanceStackParamList } from '../types';
 
-type AttendanceGrid = Record<string, boolean>;
+type AttendanceStatus = 'P' | 'A' | 'AL' | 'SL' | 'PL';
+type AttendanceGrid = Record<string, AttendanceStatus>;
 type NotesMap = Record<number, string>;
+
+const STATUS_CYCLE: AttendanceStatus[] = ['A', 'P', 'AL', 'SL', 'PL'];
+const STATUS_LABEL: Record<AttendanceStatus, string> = {
+  P: 'Present', A: 'Absent', AL: 'Annual Leave', SL: 'Sick Leave', PL: 'Parental Leave',
+};
+const STATUS_BG: Record<AttendanceStatus, string> = {
+  P: '#2d6a4f', A: '#f0f0f0', AL: '#1d4ed8', SL: '#b45309', PL: '#7c3aed',
+};
+const STATUS_TEXT: Record<AttendanceStatus, string> = {
+  P: '#fff', A: '#999', AL: '#fff', SL: '#fff', PL: '#fff',
+};
+
+function cycleStatus(current: AttendanceStatus): AttendanceStatus {
+  const idx = STATUS_CYCLE.indexOf(current);
+  return STATUS_CYCLE[(idx + 1) % STATUS_CYCLE.length];
+}
 
 const MONTHS = [
   'January','February','March','April','May','June',
@@ -155,28 +172,30 @@ function DayAttendanceModal({ visible, day, year, month, workers, grid, isSubmit
             <Text style={styles.sheetSubtitle}>{day} {MONTHS[month - 1]} {year}</Text>
           </View>
           {!isSubmitted && (
-            <Text style={styles.attHint}>Tap to toggle</Text>
+            <Text style={styles.attHint}>Tap to cycle status</Text>
           )}
         </View>
 
         <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           {workers.map(worker => {
-            const present = grid[gridKey(worker.id, day)] ?? false;
+            const status = grid[gridKey(worker.id, day)] ?? 'A';
+            const isNonAbsent = status !== 'A';
             return (
               <TouchableOpacity
                 key={worker.id}
-                style={[styles.attRow, present && styles.attRowPresent]}
+                style={[styles.attRow, isNonAbsent && styles.attRowPresent]}
                 onPress={() => { if (!isSubmitted) onToggle(worker.id, day); }}
                 activeOpacity={0.75}
                 disabled={isSubmitted}
               >
-                <Text style={[styles.attWorkerName, present && styles.attWorkerNamePresent]}>
-                  {worker.name}
-                </Text>
-                <View style={[styles.attBadge, present ? styles.attBadgeP : styles.attBadgeA]}>
-                  <Text style={[styles.attBadgeText, present ? styles.attBadgeTextP : styles.attBadgeTextA]}>
-                    {present ? 'P' : 'A'}
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.attWorkerName, isNonAbsent && styles.attWorkerNamePresent]}>
+                    {worker.name}
                   </Text>
+                  <Text style={styles.attStatusLabel}>{STATUS_LABEL[status]}</Text>
+                </View>
+                <View style={[styles.attBadge, { backgroundColor: STATUS_BG[status] }]}>
+                  <Text style={[styles.attBadgeText, { color: STATUS_TEXT[status] }]}>{status}</Text>
                 </View>
               </TouchableOpacity>
             );
@@ -218,7 +237,7 @@ const WorkerCard = memo(function WorkerCard({
   const isFutureMonth  = year > now.getFullYear() || (year === now.getFullYear() && month > now.getMonth() + 1);
 
   const presentCount = Array.from({ length: daysInMonth }, (_, i) => i + 1)
-    .filter(d => grid[gridKey(worker.id, d)]).length;
+    .filter(d => grid[gridKey(worker.id, d)] === 'P').length;
   const pct = daysInMonth > 0 ? presentCount / daysInMonth : 0;
 
   const cells: Array<number | null> = [
@@ -254,36 +273,30 @@ const WorkerCard = memo(function WorkerCard({
         {DAY_LABELS.map(l => <Text key={l} style={styles.dowLabel}>{l}</Text>)}
       </View>
 
-      {/* Full month calendar grid — tap a day to mark present/absent */}
+      {/* Full month calendar grid — tap a day to cycle status */}
       <View style={styles.calGrid}>
         {cells.map((day, idx) => {
           if (!day) return <View key={`e-${idx}`} style={styles.calCell} />;
-          const present  = grid[gridKey(worker.id, day)] ?? false;
+          const status   = grid[gridKey(worker.id, day)] ?? 'A';
           const isToday  = isCurrentMonth && day === todayDay;
           const isFuture = isFutureMonth || (isCurrentMonth && day > todayDay);
+          const bg       = STATUS_BG[status];
+          const textCol  = STATUS_TEXT[status];
           return (
             <View key={day} style={[styles.calCell, isFuture && styles.calDayFuture]}>
               <TouchableOpacity
                 style={[
                   styles.calDayBtn,
-                  present  && styles.calDayMarked,
-                  !present && isToday && styles.calDayToday,
+                  { backgroundColor: bg },
+                  isToday && status === 'A' && styles.calDayToday,
                 ]}
                 onPress={() => { if (!isSubmitted) onToggle(worker.id, day); }}
                 activeOpacity={0.7}
                 disabled={isSubmitted || isFuture}
               >
-                <Text style={[
-                  styles.calDayTiny,
-                  present  && styles.calDayTinyMarked,
-                  !present && isToday && styles.calDayTinyToday,
-                ]}>
-                  {day}
-                </Text>
+                <Text style={[styles.calDayTiny, { color: textCol }]}>{day}</Text>
                 {!isFuture && (
-                  <Text style={[styles.calStatusLetter, present ? styles.calStatusP : styles.calStatusA]}>
-                    {present ? 'P' : 'A'}
-                  </Text>
+                  <Text style={[styles.calStatusLetter, { color: textCol }]}>{status}</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -317,7 +330,7 @@ type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 export default function AttendanceScreen() {
   const { user }   = useAuth();
   const navigation = useNavigation<NativeStackNavigationProp<AttendanceStackParamList>>();
-  const isAdmin    = user?.role === 'ADMIN';
+  const isAdmin    = user?.role === 'ADMIN' || user?.role === 'MANAGER';
   const now        = new Date();
 
   const [year,  setYear]  = useState(now.getFullYear());
@@ -364,11 +377,14 @@ export default function AttendanceScreen() {
       setIsSubmitted(report.status === 'submitted');
 
       const rows = await getDb().getAllAsync<{
-        worker_id: number; day_of_month: number; present: number;
-      }>('SELECT worker_id, day_of_month, present FROM local_attendance WHERE report_id = ?', [report.id]);
+        worker_id: number; day_of_month: number; present: number; status: string | null;
+      }>('SELECT worker_id, day_of_month, present, status FROM local_attendance WHERE report_id = ?', [report.id]);
 
       const newGrid: AttendanceGrid = {};
-      for (const r of rows) newGrid[gridKey(r.worker_id, r.day_of_month)] = r.present === 1;
+      for (const r of rows) {
+        const status = (r.status as AttendanceStatus | null) ?? (r.present === 1 ? 'P' : 'A');
+        newGrid[gridKey(r.worker_id, r.day_of_month)] = status;
+      }
       setGrid(newGrid);
 
       const noteRows = await getDb().getAllAsync<{ worker_id: number; note: string }>(
@@ -397,11 +413,13 @@ export default function AttendanceScreen() {
       const records: AttendanceInput[] = [];
       for (const worker of currentWorkers) {
         for (let day = 1; day <= days; day++) {
+          const status = currentGrid[gridKey(worker.id, day)] ?? 'A';
           records.push({
             worker_id: worker.id,
             worker_name: worker.name,
             day_of_month: day,
-            present: currentGrid[gridKey(worker.id, day)] ? 1 : 0,
+            status,
+            present: status === 'P' ? 1 : 0,
             notes: null,
           });
         }
@@ -433,7 +451,10 @@ export default function AttendanceScreen() {
   }, [grid, notes, isLoaded, localReportId, workers]);
 
   const handleToggle = useCallback((workerId: number, day: number) => {
-    setGrid(prev => ({ ...prev, [gridKey(workerId, day)]: !prev[gridKey(workerId, day)] }));
+    setGrid(prev => {
+      const current = prev[gridKey(workerId, day)] ?? 'A';
+      return { ...prev, [gridKey(workerId, day)]: cycleStatus(current) };
+    });
   }, []);
 
   const handleNoteChange = useCallback((workerId: number, note: string) => {
@@ -443,10 +464,13 @@ export default function AttendanceScreen() {
   const daysInMonth = getDaysInMonth(year, month);
   const firstDow    = getFirstDayOfWeek(year, month);
 
-  // Days that already have at least one worker present — highlighted in the day picker
+  // Days that have at least one non-absent entry — highlighted in the day picker
   const markedDays = new Set<number>();
   for (let d = 1; d <= daysInMonth; d++) {
-    if (workers.some(w => grid[gridKey(w.id, d)])) markedDays.add(d);
+    if (workers.some(w => grid[gridKey(w.id, d)] === 'P' ||
+        grid[gridKey(w.id, d)] === 'AL' ||
+        grid[gridKey(w.id, d)] === 'SL' ||
+        grid[gridKey(w.id, d)] === 'PL')) markedDays.add(d);
   }
 
   function openDailyRegister() {
@@ -619,18 +643,11 @@ const styles = StyleSheet.create({
   calCell:         { width: CELL_SIZE, aspectRatio: 1, alignItems: 'center', justifyContent: 'center', padding: 2 },
   calDayBtn:       { flex: 1, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center', borderRadius: 999 },
   calDayFuture:    { opacity: 0.25 },
-  calDayMarked:    { backgroundColor: '#2d6a4f' },
   calDayToday:     { borderWidth: 2, borderColor: '#2d6a4f' },
   calDayNum:       { fontSize: 12, fontWeight: '600', color: '#333' },
-  calDayNumMarked: { color: '#fff' },
-  calDayNumToday:  { color: '#2d6a4f' },
   calDot:          { width: 3, height: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.7)', marginTop: 1 },
-  calDayTiny:      { fontSize: 9, fontWeight: '600', color: '#555', lineHeight: 11 },
-  calDayTinyMarked:{ color: '#fff' },
-  calDayTinyToday: { color: '#2d6a4f' },
+  calDayTiny:      { fontSize: 9, fontWeight: '600', lineHeight: 11 },
   calStatusLetter: { fontSize: 11, fontWeight: '800', lineHeight: 13 },
-  calStatusP:      { color: '#fff' },
-  calStatusA:      { color: '#ccc' },
 
   // Note
   noteSection:       { marginTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#f0f0f0', paddingTop: 8 },
@@ -673,12 +690,9 @@ const styles = StyleSheet.create({
   attRowPresent:        { backgroundColor: '#F0FBF4' },
   attWorkerName:        { fontSize: 15, fontWeight: '500', color: '#333', flex: 1 },
   attWorkerNamePresent: { color: '#1B4332', fontWeight: '600' },
-  attBadge:             { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  attBadgeP:            { backgroundColor: '#2d6a4f' },
-  attBadgeA:            { backgroundColor: '#f0f0f0' },
-  attBadgeText:         { fontSize: 15, fontWeight: '700' },
-  attBadgeTextP:        { color: '#fff' },
-  attBadgeTextA:        { color: '#aaa' },
+  attStatusLabel:       { fontSize: 11, color: '#aaa', marginTop: 1 },
+  attBadge:             { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  attBadgeText:         { fontSize: 13, fontWeight: '800' },
   doneBtn:              { marginTop: 14, backgroundColor: '#2d6a4f', borderRadius: 10, paddingVertical: 13, alignItems: 'center' },
   doneBtnText:          { fontSize: 15, fontWeight: '700', color: '#fff' },
 });
