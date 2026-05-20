@@ -19,11 +19,15 @@ import MonthYearSelector from '../components/shared/MonthYearSelector';
 import { getDb } from '../db/database';
 import {
   AttendanceInput,
+  getLocalReport,
   getOrCreateLocalReport,
   markSectionDirty,
   saveAttendance,
   saveAttendanceNotes,
+  updateReportSubmitted,
+  updateServerReportId,
 } from '../db/reportRepository';
+import apiClient from '../services/apiClient';
 import { WorkerDto, getWorkers } from '../services/workerService';
 import { useAuth } from '../store/AuthContext';
 import { AttendanceStackParamList } from '../types';
@@ -374,7 +378,50 @@ export default function AttendanceScreen() {
     async function load() {
       const report = await getOrCreateLocalReport(user!.farmId!, year, month);
       setLocalReportId(report.id);
-      setIsSubmitted(report.status === 'submitted');
+
+      // Pull from server unless the manager has unsynced local changes for this report
+      const pendingRow = await getDb().getFirstAsync<{ count: number }>(
+        `SELECT COUNT(*) AS count FROM sync_queue
+         WHERE report_id = ? AND section = 'attendance' AND synced = 0`,
+        [report.id],
+      );
+      if ((pendingRow?.count ?? 0) === 0) {
+        try {
+          const res = await apiClient.get('/reports', {
+            params: { farmId: user!.farmId!, year, month },
+          });
+          const serverReport = res.data?.data;
+          if (serverReport?.id) {
+            if (!report.server_report_id) {
+              await updateServerReportId(report.id, serverReport.id);
+            }
+            if (serverReport.attendance?.length > 0) {
+              await saveAttendance(
+                report.id,
+                serverReport.attendance.map((a: {
+                  workerId: number; workerName: string;
+                  dayOfMonth: number; status: string; notes: string | null;
+                }) => ({
+                  worker_id: a.workerId,
+                  worker_name: a.workerName,
+                  day_of_month: a.dayOfMonth,
+                  present: a.status === 'P' ? 1 : 0,
+                  status: a.status,
+                  notes: a.notes ?? null,
+                })),
+              );
+            }
+            if (serverReport.status === 'SUBMITTED') {
+              await updateReportSubmitted(report.id, 'server');
+            }
+          }
+        } catch {
+          // Offline or report not found — use whatever is in local DB
+        }
+      }
+
+      const refreshed = (await getLocalReport(report.id)) ?? report;
+      setIsSubmitted(refreshed.status === 'submitted');
 
       const rows = await getDb().getAllAsync<{
         worker_id: number; day_of_month: number; present: number; status: string | null;
