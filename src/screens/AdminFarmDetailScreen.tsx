@@ -438,14 +438,17 @@ export default function AdminFarmDetailScreen({ route, navigation }: Props) {
   const expenseTotal = report.expenses.reduce((s, e) => s + e.cost, 0);
   const milkTotal    = report.milk.reduce((s, m) => s + (m.litres ?? 0), 0);
 
-  // Attendance summary: workers → present days
-  const attendanceByWorker: Record<number, { name: string; present: number }> = {};
+  // Attendance summary: use a Set per worker so duplicate rows don't inflate the count
+  const attendanceByWorker: Record<number, { name: string; presentDays: Set<number> }> = {};
   for (const a of report.attendance) {
-    if (!attendanceByWorker[a.workerId]) attendanceByWorker[a.workerId] = { name: a.workerName, present: 0 };
-    if (a.present) attendanceByWorker[a.workerId].present++;
+    if (!attendanceByWorker[a.workerId]) {
+      attendanceByWorker[a.workerId] = { name: a.workerName, presentDays: new Set() };
+    }
+    if (a.present) attendanceByWorker[a.workerId].presentDays.add(a.dayOfMonth);
   }
   const daysInMonth = new Date(year, month, 0).getDate();
-  const workerEntries = Object.values(attendanceByWorker);
+  const workerEntries = Object.values(attendanceByWorker)
+    .map(w => ({ name: w.name, present: w.presentDays.size }));
 
   // Livestock by category
   const livestockByCategory: Record<string, { type: string; count: number }[]> = {};
