@@ -14,11 +14,15 @@ import MonthYearSelector from '../../components/shared/MonthYearSelector';
 import { LivestockFormValues } from '../../components/livestock/LivestockSection';
 import LivestockSection from '../../components/livestock/LivestockSection';
 import {
+  getLocalReport,
   getOrCreateLocalReport,
   markSectionDirty,
   saveLivestock,
   saveLivestockNotes,
+  updateReportSubmitted,
+  updateServerReportId,
 } from '../../db/reportRepository';
+import apiClient from '../../services/apiClient';
 import {
   CATEGORY_ORDER,
   GroupedLivestockTypes,
@@ -54,8 +58,9 @@ export default function LivestockScreen() {
   const [saveState,      setSaveState]      = useState<SaveState>('idle');
   const [categoryNotes,  setCategoryNotes]  = useState<Record<string, string>>({});
 
-  const debounceRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const debounceRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const skipSaveRef   = useRef(false);
 
   const { control, reset, formState: { errors }, watch } = useForm<LivestockFormValues>({
     defaultValues: {},
@@ -81,10 +86,50 @@ export default function LivestockScreen() {
     async function load() {
       const report = await getOrCreateLocalReport(user!.farmId!, year, month);
       setLocalReportId(report.id);
-      setIsSubmitted(report.status === 'submitted');
+
+      const db = getDb();
+
+      const pendingRow = await db.getFirstAsync<{ count: number }>(
+        `SELECT COUNT(*) AS count FROM sync_queue
+         WHERE report_id = ? AND section = 'livestock' AND synced = 0`,
+        [report.id],
+      );
+      if ((pendingRow?.count ?? 0) === 0) {
+        try {
+          const res = await apiClient.get('/reports', {
+            params: { farmId: user!.farmId!, year, month },
+          });
+          const serverReport = res.data?.data;
+          if (serverReport?.id) {
+            if (!report.server_report_id) {
+              await updateServerReportId(report.id, serverReport.id);
+            }
+            if (serverReport.livestock?.length > 0) {
+              await saveLivestock(
+                report.id,
+                serverReport.livestock.map((l: {
+                  livestockTypeId: number; category: string; type: string; count: number;
+                }) => ({
+                  livestock_type_id: l.livestockTypeId,
+                  category: l.category,
+                  type_name: l.type,
+                  count: l.count,
+                })),
+              );
+            }
+            if (serverReport.status === 'SUBMITTED') {
+              await updateReportSubmitted(report.id, 'server');
+            }
+          }
+        } catch {
+          // Offline or report not found — use local DB
+        }
+      }
+
+      const refreshed = (await getLocalReport(report.id)) ?? report;
+      setIsSubmitted(refreshed.status === 'submitted');
 
       // Load existing livestock data for this report
-      const db = getDb();
       const rows = await db.getAllAsync<{ livestock_type_id: number; count: number }>(
         'SELECT livestock_type_id, count FROM local_livestock WHERE report_id = ?',
         [report.id],
@@ -94,6 +139,7 @@ export default function LivestockScreen() {
       for (const row of rows) {
         defaults[`count_${row.livestock_type_id}`] = String(row.count);
       }
+      skipSaveRef.current = true;
       reset(defaults);
 
       const noteRows = await db.getAllAsync<{ category: string; note: string }>(
@@ -148,6 +194,11 @@ export default function LivestockScreen() {
 
   useEffect(() => {
     if (!isLoaded || !localReportId || !grouped || isSubmitted) return;
+
+    if (skipSaveRef.current) {
+      skipSaveRef.current = false;
+      return;
+    }
 
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {

@@ -19,10 +19,14 @@ const WEEK_TOTAL_HEIGHT = 36;
 import MonthYearSelector from '../../components/shared/MonthYearSelector';
 import { getDb } from '../../db/database';
 import {
+  getLocalReport,
   getOrCreateLocalReport,
   markSectionDirty,
   saveMilk,
+  updateReportSubmitted,
+  updateServerReportId,
 } from '../../db/reportRepository';
+import apiClient from '../../services/apiClient';
 import { useAuth } from '../../store/AuthContext';
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
@@ -210,9 +214,45 @@ export default function MilkScreen() {
     async function load() {
       const report = await getOrCreateLocalReport(user!.farmId!, year, month);
       setLocalReportId(report.id);
-      setIsSubmitted(report.status === 'submitted');
 
       const db = getDb();
+
+      const pendingRow = await db.getFirstAsync<{ count: number }>(
+        `SELECT COUNT(*) AS count FROM sync_queue
+         WHERE report_id = ? AND section = 'milk' AND synced = 0`,
+        [report.id],
+      );
+      if ((pendingRow?.count ?? 0) === 0) {
+        try {
+          const res = await apiClient.get('/reports', {
+            params: { farmId: user!.farmId!, year, month },
+          });
+          const serverReport = res.data?.data;
+          if (serverReport?.id) {
+            if (!report.server_report_id) {
+              await updateServerReportId(report.id, serverReport.id);
+            }
+            if (serverReport.milk?.length > 0) {
+              await saveMilk(
+                report.id,
+                serverReport.milk.map((m: { dayOfMonth: number; litres: number }) => ({
+                  day_of_month: m.dayOfMonth,
+                  litres: m.litres,
+                })),
+              );
+            }
+            if (serverReport.status === 'SUBMITTED') {
+              await updateReportSubmitted(report.id, 'server');
+            }
+          }
+        } catch {
+          // Offline or report not found — use local DB
+        }
+      }
+
+      const refreshed = (await getLocalReport(report.id)) ?? report;
+      setIsSubmitted(refreshed.status === 'submitted');
+
       const rows = await db.getAllAsync<{ day_of_month: number; litres: number }>(
         'SELECT day_of_month, litres FROM local_milk WHERE report_id = ?',
         [report.id],
