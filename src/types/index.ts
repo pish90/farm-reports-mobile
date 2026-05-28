@@ -18,7 +18,38 @@ export type AdminStackParamList = {
     farmId: number;
     farmName: string;
   };
+  AuditLog: undefined;
 };
+
+export type AuditActionType =
+  | 'LOGIN' | 'LOGIN_FAILED' | 'PASSWORD_CHANGED' | 'PASSWORD_RESET'
+  | 'REPORT_CREATED' | 'REPORT_SUBMITTED' | 'REPORT_REOPENED'
+  | 'ATTENDANCE_UPDATED' | 'LIVESTOCK_UPDATED' | 'MILK_UPDATED'
+  | 'EXPENSES_UPDATED' | 'ATTENDANCE_NOTES_UPDATED' | 'LIVESTOCK_NOTES_UPDATED'
+  | 'WORKER_ADDED' | 'WORKER_DEACTIVATED' | 'EXCEL_EXPORTED';
+
+export interface AuditLog {
+  id: number;
+  timestamp: string;
+  userId: number | null;
+  userName: string | null;
+  userRole: string | null;
+  farmId: number | null;
+  farmName: string | null;
+  action: AuditActionType;
+  entityType: string | null;
+  entityId: string | null;
+  description: string | null;
+  ipAddress: string | null;
+}
+
+export interface AuditLogPage {
+  content: AuditLog[];
+  totalElements: number;
+  totalPages: number;
+  page: number;
+  size: number;
+}
 
 // Server-side report DTOs (returned by admin API)
 export interface ServerAttendanceRecord {

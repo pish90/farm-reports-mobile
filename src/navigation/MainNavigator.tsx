@@ -5,6 +5,7 @@ import { TouchableOpacity, View } from 'react-native';
 import SyncStatusBadge from '../components/shared/SyncStatusBadge';
 import AdminDashboardScreen from '../screens/AdminDashboardScreen';
 import AdminFarmDetailScreen from '../screens/AdminFarmDetailScreen';
+import AuditLogScreen from '../screens/AuditLogScreen';
 import AttendanceScreen from '../screens/AttendanceScreen';
 import ExpensesScreen from '../screens/expenses/ExpensesScreen';
 import LivestockScreen from '../screens/livestock/LivestockScreen';
@@ -46,6 +47,16 @@ function AdminNavigator() {
           headerTitleStyle: { fontWeight: '600', fontSize: 17 },
           headerTintColor: '#2d6a4f',
         })}
+      />
+      <AdminStack.Screen
+        name="AuditLog"
+        component={AuditLogScreen}
+        options={{
+          headerShown: true,
+          title: 'Audit Log',
+          headerTitleStyle: { fontWeight: '600', fontSize: 17 },
+          headerTintColor: '#2d6a4f',
+        }}
       />
     </AdminStack.Navigator>
   );

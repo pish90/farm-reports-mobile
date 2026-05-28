@@ -176,22 +176,33 @@ export default function AdminDashboardScreen() {
     <View style={styles.container}>
       <View style={styles.topBar}>
         <Text style={styles.title}>{isManager ? 'My Farm Report' : 'Farm Overview'}</Text>
-        {!isManager && (
-          <TouchableOpacity
-            style={[styles.exportBtn, isExporting && styles.exportBtnDisabled]}
-            onPress={handleExport}
-            disabled={isExporting}
-          >
-            {isExporting ? (
-              <ActivityIndicator size="small" color="#2d6a4f" />
-            ) : (
-              <>
-                <Feather name="download" size={16} color="#2d6a4f" />
-                <Text style={styles.exportBtnText}>Excel</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        )}
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          {(isAdmin || isManager) && (
+            <TouchableOpacity
+              style={styles.auditBtn}
+              onPress={() => navigation.navigate('AuditLog')}
+            >
+              <Feather name="activity" size={15} color="#2d6a4f" />
+              <Text style={styles.auditBtnText}>Audit</Text>
+            </TouchableOpacity>
+          )}
+          {!isManager && (
+            <TouchableOpacity
+              style={[styles.exportBtn, isExporting && styles.exportBtnDisabled]}
+              onPress={handleExport}
+              disabled={isExporting}
+            >
+              {isExporting ? (
+                <ActivityIndicator size="small" color="#2d6a4f" />
+              ) : (
+                <>
+                  <Feather name="download" size={16} color="#2d6a4f" />
+                  <Text style={styles.exportBtnText}>Excel</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       <MonthYearSelector year={year} month={month} onChange={(y, m) => { setYear(y); setMonth(m); }} />
@@ -274,6 +285,13 @@ const styles = StyleSheet.create({
   },
   exportBtnDisabled: { opacity: 0.5 },
   exportBtnText: { fontSize: 13, fontWeight: '600', color: '#2d6a4f' },
+  auditBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 12, paddingVertical: 8,
+    borderWidth: 1, borderColor: '#b7e4c7', borderRadius: 20,
+    backgroundColor: '#fff',
+  },
+  auditBtnText: { fontSize: 13, fontWeight: '600', color: '#2d6a4f' },
 
   centered:  { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   errorText: { marginTop: 12, color: '#e53e3e', textAlign: 'center', fontSize: 14 },
