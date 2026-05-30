@@ -34,7 +34,9 @@
           "photosPermission": "Allow Farm Reports to access photos for receipt images.",
           "cameraPermission": "Allow Farm Reports to use the camera to capture receipt images."
         }
-      ]
+      ],
+      "expo-sharing",
+      "expo-status-bar"
     ],
     "extra": {
       "eas": {
@@ -43,10 +45,11 @@
     },
     "privacy": "public",
     "owner": "pklife",
-    "runtimeVersion": "exposdk:54.0.0",
+    "runtimeVersion": "exposdk:56.0.0",
     "updates": {
       "url": "https://u.expo.dev/bdb6a038-448e-4bd1-977a-b5da6a662739",
-      "fallbackToCacheTimeout": 0
+      "fallbackToCacheTimeout": 10000,
+      "checkAutomatically": "ON_LOAD"
     }
   }
 }
