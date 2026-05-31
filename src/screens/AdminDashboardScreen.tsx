@@ -12,6 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MonthYearSelector from '../components/shared/MonthYearSelector';
 import { adminService } from '../services/adminService';
 import { useAuth } from '../store/AuthContext';
@@ -114,6 +115,7 @@ function FarmCard({ farm, onPress, onReopen, onManageWorkers, reopening, isOpsMa
 export default function AdminDashboardScreen() {
   const navigation = useNavigation<Nav>();
   const { user } = useAuth();
+  const insets = useSafeAreaInsets();
   const isOpsManager = user?.role === 'OPERATIONS_MANAGER';
   const isManager    = user?.role === 'MANAGER';
   const isAdmin      = user?.role === 'ADMIN';
@@ -174,7 +176,7 @@ export default function AdminDashboardScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.topBar}>
+      <View style={[styles.topBar, { paddingTop: insets.top + 12 }]}>
         <Text style={styles.title}>{isManager ? 'My Farm Report' : 'Farm Overview'}</Text>
         <View style={{ flexDirection: 'row', gap: 8 }}>
           {(isAdmin || isManager) && (
