@@ -17,15 +17,18 @@ import { getDb } from '../../db/database';
 import {
   LocalExpenseRecord,
   getOrCreateLocalReport,
+  getPendingSyncs,
   markSectionDirty,
   saveExpenses,
 } from '../../db/reportRepository';
+import apiClient from '../../services/apiClient';
 import {
   BusinessUnitDto,
   ExpenseCategoryDto,
   getBusinessUnits,
   getExpenseCategories,
 } from '../../services/lookupService';
+import { ServerExpense } from '../../types';
 import { useAuth } from '../../store/AuthContext';
 
 // Expense enriched with its apportionments for round-tripping through the form
@@ -90,12 +93,59 @@ export default function ExpensesScreen() {
     setIsLoaded(false);
     setLoadError(null);
     setExpenses([]);
-    load();
 
     async function load() {
       const report = await getOrCreateLocalReport(user!.farmId!, year, month);
       setLocalReportId(report.id);
       setIsSubmitted(report.status === 'submitted');
+
+      // Pull from server when local is empty and no local-edit is pending
+      if (report.server_report_id) {
+        const localCnt = await getDb().getFirstAsync<{ cnt: number }>(
+          'SELECT COUNT(*) as cnt FROM local_expenses WHERE report_id = ?',
+          [report.id],
+        );
+        if (localCnt?.cnt === 0) {
+          const pending = await getPendingSyncs(report.id);
+          if (!pending.some(p => p.section === 'expenses')) {
+            try {
+              const res = await apiClient.get('/reports', {
+                params: { farmId: user!.farmId!, year, month },
+              });
+              const serverExpenses: ServerExpense[] = res.data.data?.expenses ?? [];
+              if (serverExpenses.length > 0) {
+                await saveExpenses(report.id, serverExpenses.map(e => ({
+                  entry_no: e.entryNo,
+                  date: e.date,
+                  supplier_contractor: e.supplierContractor,
+                  receipt_no: e.receiptNo,
+                  cost: Number(e.cost),
+                  description: e.description,
+                  category_id: e.categoryId,
+                  category_code: e.categoryCode,
+                  category_name: e.categoryName,
+                  business_unit_id: e.businessUnitId,
+                  business_unit_code: e.businessUnitCode,
+                  business_unit_name: e.businessUnitName,
+                  receipt_image_uri: null,
+                  apportionments: e.apportionments.map(ap => ({
+                    business_unit_id: ap.businessUnitId,
+                    business_unit_code: ap.businessUnitCode,
+                    business_unit_name: ap.businessUnitName,
+                    percentage: Number(ap.percentage),
+                    amount: Number(ap.amount),
+                  })),
+                })));
+              }
+              if (res.data.data?.status === 'SUBMITTED') {
+                setIsSubmitted(true);
+              }
+            } catch {
+              // Server unreachable — continue with local data
+            }
+          }
+        }
+      }
 
       const rows = await getDb().getAllAsync<LocalExpenseRecord>(
         'SELECT * FROM local_expenses WHERE report_id = ? ORDER BY entry_no',
@@ -132,7 +182,7 @@ export default function ExpensesScreen() {
       setIsLoaded(true);
     }
 
-    load().catch((e) => setLoadError(e.message ?? 'Failed to load expenses'));
+    load().catch(e => setLoadError(e.message ?? 'Failed to load expenses'));
   }, [user?.farmId, year, month]);
 
   // ── Load lookup data once ─────────────────────────────────────────────────
