@@ -34,9 +34,7 @@
           "photosPermission": "Allow Farm Reports to access photos for receipt images.",
           "cameraPermission": "Allow Farm Reports to use the camera to capture receipt images."
         }
-      ],
-      "expo-sharing",
-      "expo-status-bar"
+      ]
     ],
     "extra": {
       "eas": {
