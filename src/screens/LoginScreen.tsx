@@ -1,3 +1,4 @@
+import { Feather } from '@expo/vector-icons';
 import { Controller, useForm } from 'react-hook-form';
 import {
   ActivityIndicator,
@@ -9,6 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useState } from 'react';
 import { useAuth } from '../store/AuthContext';
 
 interface FormData {
@@ -18,6 +20,7 @@ interface FormData {
 
 export default function LoginScreen() {
   const { login } = useAuth();
+  const [showPassword, setShowPassword] = useState(false);
   const {
     control,
     handleSubmit,
@@ -83,15 +86,24 @@ export default function LoginScreen() {
           name="password"
           rules={{ required: 'Password is required' }}
           render={({ field: { onChange, onBlur, value } }) => (
-            <TextInput
-              style={[styles.input, errors.password && styles.inputError]}
-              placeholder="Password"
-              placeholderTextColor="#aaa"
-              secureTextEntry
-              onBlur={onBlur}
-              onChangeText={onChange}
-              value={value}
-            />
+            <View style={styles.passwordRow}>
+              <TextInput
+                style={[styles.input, styles.passwordInput, errors.password && styles.inputError]}
+                placeholder="Password"
+                placeholderTextColor="#aaa"
+                secureTextEntry={!showPassword}
+                onBlur={onBlur}
+                onChangeText={onChange}
+                value={value}
+              />
+              <TouchableOpacity
+                style={styles.eyeBtn}
+                onPress={() => setShowPassword(v => !v)}
+                hitSlop={8}
+              >
+                <Feather name={showPassword ? 'eye-off' : 'eye'} size={20} color="#aaa" />
+              </TouchableOpacity>
+            </View>
           )}
         />
         {errors.password && (
@@ -156,6 +168,9 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   errorBoxText: { color: '#c53030', fontSize: 14, textAlign: 'center' },
+  passwordRow: { position: 'relative', marginBottom: 4 },
+  passwordInput: { marginBottom: 0, paddingRight: 46 },
+  eyeBtn: { position: 'absolute', right: 14, top: 0, bottom: 0, justifyContent: 'center' },
   button: {
     backgroundColor: '#2d6a4f',
     padding: 16,

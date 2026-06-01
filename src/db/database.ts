@@ -146,6 +146,7 @@ export async function initDatabase(): Promise<void> {
     'ALTER TABLE local_expenses ADD COLUMN business_unit_code TEXT',
     'ALTER TABLE local_expenses ADD COLUMN business_unit_name TEXT',
     'ALTER TABLE local_expenses ADD COLUMN receipt_image_uri TEXT',
+    'ALTER TABLE local_attendance ADD COLUMN status TEXT',
   ];
   for (const sql of migrations) {
     try { await db.execAsync(`${sql};`); } catch {}

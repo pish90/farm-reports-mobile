@@ -27,7 +27,8 @@ export interface LocalAttendanceRecord {
   worker_id: number;
   worker_name: string;
   day_of_month: number;
-  present: number; // 0 | 1
+  present: number; // 0 | 1 — kept for backward compat
+  status: string | null; // 'P' | 'A' | 'AL' | 'SL' | 'PL'
   notes: string | null;
 }
 
@@ -104,7 +105,7 @@ export interface FullReport {
 }
 
 // Input types (no id / report_id — provided by caller)
-export type AttendanceInput = Omit<LocalAttendanceRecord, 'id' | 'report_id'>;
+export type AttendanceInput = Omit<LocalAttendanceRecord, 'id' | 'report_id' | 'present'> & { present: number };
 export type LivestockInput  = Omit<LocalLivestockRecord,  'id' | 'report_id'>;
 export type MilkInput       = Omit<LocalMilkRecord,       'id' | 'report_id'>;
 export type ExpenseInput    = Omit<LocalExpenseRecord, 'id' | 'report_id'> & {
@@ -184,9 +185,9 @@ export async function saveAttendance(
     for (const r of records) {
       await db.runAsync(
         `INSERT INTO local_attendance
-           (report_id, worker_id, worker_name, day_of_month, present, notes)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [reportId, r.worker_id, r.worker_name, r.day_of_month, r.present, r.notes ?? null],
+           (report_id, worker_id, worker_name, day_of_month, present, status, notes)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [reportId, r.worker_id, r.worker_name, r.day_of_month, r.present, r.status ?? null, r.notes ?? null],
       );
     }
   });

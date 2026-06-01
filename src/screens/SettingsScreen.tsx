@@ -142,14 +142,14 @@ function SettingsRow({
 // ── Main screen ───────────────────────────────────────────────────────────────
 
 export default function SettingsScreen() {
-  const { user, logout } = useAuth();
+  const { user, logout, changePassword } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
 
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [showResetPassword,  setShowResetPassword]  = useState(false);
 
   async function handleChangePassword(values: Record<string, string>) {
-    await authService.changePassword(values.currentPassword, values.newPassword);
+    await changePassword(values.currentPassword, values.newPassword);
     Alert.alert('Success', 'Your password has been updated.');
   }
 
@@ -223,7 +223,7 @@ export default function SettingsScreen() {
         title="Change My Password"
         fields={[
           { key: 'currentPassword', label: 'Current Password', placeholder: 'Enter current password' },
-          { key: 'newPassword',     label: 'New Password',     placeholder: 'Min. 6 characters' },
+          { key: 'newPassword',     label: 'New Password',     placeholder: 'Min. 8 chars, upper, number, symbol' },
         ]}
         onSubmit={handleChangePassword}
         onClose={() => setShowChangePassword(false)}

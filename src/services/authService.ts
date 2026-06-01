@@ -39,20 +39,22 @@ export const authService = {
     const payload = decodePayload(token);
     if (!payload) return null;
     return {
-      userId:   Number(payload.userId),
-      farmId:   payload.farmId != null ? Number(payload.farmId) : null,
-      farmName: payload.farmName != null ? String(payload.farmName) : null,
-      userName: String(payload.userName),
-      role:     String(payload.role ?? 'WORKER'),
+      userId:             Number(payload.userId),
+      farmId:             payload.farmId != null ? Number(payload.farmId) : null,
+      farmName:           payload.farmName != null ? String(payload.farmName) : null,
+      userName:           String(payload.userName),
+      role:               String(payload.role ?? 'WORKER'),
+      mustChangePassword: payload.mustChangePassword === true,
     };
   },
 
   async changePassword(currentPassword: string, newPassword: string): Promise<void> {
     const token = await AsyncStorage.getItem(TOKEN_KEY);
-    await axios.put(`${API_URL}/auth/password`,
+    const response = await axios.put(`${API_URL}/auth/password`,
       { currentPassword, newPassword },
       { headers: { Authorization: `Bearer ${token}` } },
     );
+    await AsyncStorage.setItem(TOKEN_KEY, response.data.token);
   },
 
   async isAuthenticated(): Promise<boolean> {

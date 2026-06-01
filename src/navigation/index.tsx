@@ -1,5 +1,6 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { ActivityIndicator, Platform, View } from 'react-native';
+import ChangePasswordScreen from '../screens/ChangePasswordScreen';
 import LoginScreen from '../screens/LoginScreen';
 import SummaryScreen from '../screens/SummaryScreen';
 import { useAuth } from '../store/AuthContext';
@@ -21,7 +22,11 @@ export default function RootNavigator() {
 
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
-      {user ? (
+      {!user ? (
+        <Stack.Screen name="Login" component={LoginScreen} />
+      ) : user.mustChangePassword ? (
+        <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
+      ) : (
         <>
           <Stack.Screen name="Main" component={MainNavigator} />
           <Stack.Screen
@@ -36,8 +41,6 @@ export default function RootNavigator() {
             }}
           />
         </>
-      ) : (
-        <Stack.Screen name="Login" component={LoginScreen} />
       )}
     </Stack.Navigator>
   );
