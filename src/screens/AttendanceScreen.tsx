@@ -568,10 +568,6 @@ const CasualCard = memo(function CasualCard({
     ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
   ];
 
-  const rateSheetCurrentRate = rateSheetDay != null
-    ? (rateOverrides[gridKey(labourer.id, rateSheetDay)] ?? labourer.defaultDailyRate)
-    : labourer.defaultDailyRate;
-
   return (
     <View style={styles.casualCard}>
       <View style={styles.workerCardHeader}>
