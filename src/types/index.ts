@@ -157,6 +157,25 @@ export interface CasualAttendanceRecord {
   status: string;
   rateOverride: number | null;
   effectiveRate: number;
+  taskDescription: string | null;
+}
+
+export interface CasualLabourerPaymentDto {
+  id: number;
+  casualLabourerId: number;
+  labourerName: string;
+  paymentDate: string; // YYYY-MM-DD
+  amount: number;
+  note: string | null;
+  paidBy: string | null;
+  createdAt: string;
+}
+
+export interface CasualLabourerSummaryDto {
+  allTimeEarned: number;
+  allTimePaid: number;
+  outstanding: number;
+  payments: CasualLabourerPaymentDto[];
 }
 
 export type AttendanceStackParamList = {

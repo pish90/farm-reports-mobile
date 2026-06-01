@@ -1,5 +1,7 @@
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import { getDb } from '../db/database';
-import { CasualLabourerDto } from '../types';
+import { CasualLabourerDto, CasualLabourerPaymentDto, CasualLabourerSummaryDto } from '../types';
 import apiClient from './apiClient';
 
 interface AddCasualLabourerParams {
@@ -8,6 +10,12 @@ interface AddCasualLabourerParams {
   defaultDailyRate: number;
   photoBase64: string | null;
   photoMimeType: string | null;
+}
+
+interface RecordPaymentParams {
+  paymentDate: string; // YYYY-MM-DD
+  amount: number;
+  note: string | null;
 }
 
 async function getCachedCasualLabourers(farmId: number): Promise<CasualLabourerDto[] | null> {
@@ -44,6 +52,8 @@ async function setCachedCasualLabourers(farmId: number, labourers: CasualLaboure
   });
 }
 
+// ── Labourers ─────────────────────────────────────────────────────────────────
+
 export async function getCasualLabourers(farmId: number): Promise<CasualLabourerDto[]> {
   try {
     const res = await apiClient.get(`/farms/${farmId}/casual-labourers`);
@@ -51,7 +61,6 @@ export async function getCasualLabourers(farmId: number): Promise<CasualLabourer
     await setCachedCasualLabourers(farmId, labourers);
     return labourers;
   } catch {
-    // Offline — return cached list, or empty array if no cache yet
     const cached = await getCachedCasualLabourers(farmId);
     return cached ?? [];
   }
@@ -73,4 +82,70 @@ export async function addCasualLabourer(
 
 export async function deactivateCasualLabourer(farmId: number, labourerId: number): Promise<void> {
   await apiClient.delete(`/farms/${farmId}/casual-labourers/${labourerId}`);
+}
+
+// ── Summary ───────────────────────────────────────────────────────────────────
+
+export async function getCasualLabourerSummary(
+  farmId: number,
+  labourerId: number,
+): Promise<CasualLabourerSummaryDto> {
+  const res = await apiClient.get(`/farms/${farmId}/casual-labourers/${labourerId}/summary`);
+  return res.data.data as CasualLabourerSummaryDto;
+}
+
+// ── Payments ──────────────────────────────────────────────────────────────────
+
+export async function recordPayment(
+  farmId: number,
+  labourerId: number,
+  params: RecordPaymentParams,
+): Promise<CasualLabourerPaymentDto> {
+  const res = await apiClient.post(`/farms/${farmId}/casual-labourers/${labourerId}/payments`, {
+    paymentDate: params.paymentDate,
+    amount: params.amount,
+    note: params.note || null,
+  });
+  return res.data.data as CasualLabourerPaymentDto;
+}
+
+export async function deletePayment(
+  farmId: number,
+  labourerId: number,
+  paymentId: number,
+): Promise<void> {
+  await apiClient.delete(`/farms/${farmId}/casual-labourers/${labourerId}/payments/${paymentId}`);
+}
+
+// ── Export ────────────────────────────────────────────────────────────────────
+
+export async function downloadAndShareMonthlyExcel(
+  farmId: number,
+  year: number,
+  month: number,
+): Promise<void> {
+  const res = await apiClient.get(`/farms/${farmId}/casual-labourers/export`, {
+    params: { year, month },
+    responseType: 'arraybuffer',
+  });
+
+  const bytes = new Uint8Array(res.data as ArrayBuffer);
+  let binary = '';
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  const base64 = btoa(binary);
+
+  const fileName = `casual-labour-${year}-${String(month).padStart(2, '0')}.xlsx`;
+  const fileUri = (FileSystem.cacheDirectory ?? '') + fileName;
+
+  await FileSystem.writeAsStringAsync(fileUri, base64, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+
+  await Sharing.shareAsync(fileUri, {
+    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    dialogTitle: 'Export Casual Labour Report',
+    UTI: 'com.microsoft.excel.xlsx',
+  });
 }

@@ -40,6 +40,8 @@ type AttendanceStatus = 'P' | 'A' | 'AL' | 'SL' | 'PL';
 type AttendanceGrid = Record<string, AttendanceStatus>;
 // rate overrides: key is `${casualLabourerId}_${day}`, value is rate (undefined = use default)
 type RateOverrides = Record<string, number | undefined>;
+// task descriptions: key is `${casualLabourerId}_${day}`, value is free-text task name
+type TaskDescriptions = Record<string, string>;
 type NotesMap = Record<number, string>;
 
 const STATUS_CYCLE: AttendanceStatus[] = ['A', 'P', 'AL', 'SL', 'PL'];
@@ -134,17 +136,19 @@ function DayPickerModal({ visible, year, month, markedDays, onSelect, onClose }:
 interface DayAttendanceProps {
   visible: boolean; day: number; year: number; month: number;
   workers: WorkerDto[]; casuals: CasualLabourerDto[];
-  grid: AttendanceGrid; casualGrid: AttendanceGrid; rateOverrides: RateOverrides;
+  grid: AttendanceGrid; casualGrid: AttendanceGrid;
+  rateOverrides: RateOverrides; taskDescriptions: TaskDescriptions;
   isSubmitted: boolean;
   onToggle: (workerId: number, day: number) => void;
   onToggleCasual: (labourerId: number, day: number) => void;
   onRateChange: (labourerId: number, day: number, rate: number | undefined) => void;
+  onTaskChange: (labourerId: number, day: number, task: string) => void;
   onClose: () => void;
 }
 
 function DayAttendanceModal({
-  visible, day, year, month, workers, casuals, grid, casualGrid, rateOverrides,
-  isSubmitted, onToggle, onToggleCasual, onRateChange, onClose,
+  visible, day, year, month, workers, casuals, grid, casualGrid, rateOverrides, taskDescriptions,
+  isSubmitted, onToggle, onToggleCasual, onRateChange, onTaskChange, onClose,
 }: DayAttendanceProps) {
   const date    = new Date(year, month - 1, day);
   const dayName = date.toLocaleDateString('en-GB', { weekday: 'long' });
@@ -211,11 +215,21 @@ function DayAttendanceModal({
                   <Text style={styles.attStatusLabel}>{STATUS_LABEL[status]}</Text>
                 </TouchableOpacity>
                 {isNonAbsent && status === 'P' && !isSubmitted && (
-                  <RateInput
-                    value={String(rateVal)}
-                    hasOverride={hasOverride}
-                    onCommit={(val) => onRateChange(labourer.id, day, val)}
-                  />
+                  <View style={{ alignItems: 'flex-end', marginRight: 8 }}>
+                    <TextInput
+                      style={styles.dayTaskInput}
+                      value={taskDescriptions[overrideKey] ?? ''}
+                      onChangeText={(t) => onTaskChange(labourer.id, day, t)}
+                      placeholder="Task…"
+                      placeholderTextColor="#ccc"
+                      maxLength={60}
+                    />
+                    <RateInput
+                      value={String(rateVal)}
+                      hasOverride={hasOverride}
+                      onCommit={(val) => onRateChange(labourer.id, day, val)}
+                    />
+                  </View>
                 )}
                 <TouchableOpacity
                   style={{ marginLeft: 8 }}
@@ -315,29 +329,34 @@ const rateInputStyles = StyleSheet.create({
 
 // ─── Rate override bottom sheet (long-press on calendar cell) ─────────────────
 
-interface RateOverrideSheetProps {
+interface DayDetailsSheetProps {
   visible: boolean;
   labourerName: string;
   day: number; month: number; year: number;
   currentRate: number;
   defaultRate: number;
-  onSave: (rate: number | undefined) => void;
+  currentTask: string;
+  onSave: (rate: number | undefined, task: string) => void;
   onClose: () => void;
 }
 
-function RateOverrideSheet({
-  visible, labourerName, day, month, year, currentRate, defaultRate, onSave, onClose,
-}: RateOverrideSheetProps) {
-  const [text, setText] = useState(String(currentRate));
-  useEffect(() => { if (visible) setText(String(currentRate)); }, [visible, currentRate]);
+function DayDetailsSheet({
+  visible, labourerName, day, month, year, currentRate, defaultRate, currentTask, onSave, onClose,
+}: DayDetailsSheetProps) {
+  const [rateText, setRateText] = useState(String(currentRate));
+  const [taskText, setTaskText] = useState(currentTask);
+
+  useEffect(() => {
+    if (visible) { setRateText(String(currentRate)); setTaskText(currentTask); }
+  }, [visible, currentRate, currentTask]);
 
   function handleSave() {
-    const parsed = parseFloat(text);
-    onSave(isNaN(parsed) || parsed <= 0 ? undefined : parsed);
+    const parsed = parseFloat(rateText);
+    onSave(isNaN(parsed) || parsed <= 0 ? undefined : parsed, taskText.trim());
     onClose();
   }
 
-  function handleReset() { onSave(undefined); onClose(); }
+  function handleReset() { onSave(undefined, taskText.trim()); onClose(); }
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -345,21 +364,30 @@ function RateOverrideSheet({
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ position: 'absolute', bottom: 0, left: 0, right: 0 }}>
         <View style={rateSheetStyles.sheet} elevation={12}>
           <View style={styles.handle} />
-          <Text style={rateSheetStyles.title}>Rate for {labourerName}</Text>
+          <Text style={rateSheetStyles.title}>{labourerName}</Text>
           <Text style={rateSheetStyles.sub}>{day} {MONTHS[month - 1]} {year}</Text>
+          <Text style={rateSheetStyles.label}>Task / work done</Text>
+          <TextInput
+            style={rateSheetStyles.taskInput}
+            value={taskText}
+            onChangeText={setTaskText}
+            placeholder="e.g. Picking, Weeding, Spraying…"
+            placeholderTextColor="#bbb"
+            maxLength={100}
+            returnKeyType="next"
+          />
           <Text style={rateSheetStyles.label}>Daily rate (Ksh)</Text>
           <TextInput
             style={rateSheetStyles.input}
-            value={text}
-            onChangeText={setText}
+            value={rateText}
+            onChangeText={setRateText}
             keyboardType="numeric"
-            autoFocus
             selectTextOnFocus
             maxLength={8}
             returnKeyType="done"
             onSubmitEditing={handleSave}
           />
-          {currentRate !== defaultRate && (
+          {parseFloat(rateText) !== defaultRate && (
             <TouchableOpacity onPress={handleReset} style={rateSheetStyles.resetLink}>
               <Text style={rateSheetStyles.resetText}>Reset to default (Ksh {defaultRate})</Text>
             </TouchableOpacity>
@@ -390,6 +418,11 @@ const rateSheetStyles = StyleSheet.create({
   title:    { fontSize: 17, fontWeight: '700', color: '#1a1a1a', textAlign: 'center', marginBottom: 2 },
   sub:      { fontSize: 12, color: '#aaa', textAlign: 'center', marginBottom: 16 },
   label:    { fontSize: 13, fontWeight: '600', color: '#555', marginBottom: 8 },
+  taskInput: {
+    borderWidth: 1, borderColor: '#ddd', borderRadius: 10,
+    paddingHorizontal: 14, paddingVertical: 12,
+    fontSize: 15, color: '#1a1a1a', backgroundColor: '#fafafa', marginBottom: 16,
+  },
   input: {
     borderWidth: 1, borderColor: '#ddd', borderRadius: 10,
     paddingHorizontal: 14, paddingVertical: 12,
@@ -502,17 +535,18 @@ const WorkerCard = memo(function WorkerCard({
 interface CasualCardProps {
   labourer: CasualLabourerDto; year: number; month: number;
   daysInMonth: number; firstDow: number;
-  casualGrid: AttendanceGrid; rateOverrides: RateOverrides;
+  casualGrid: AttendanceGrid; rateOverrides: RateOverrides; taskDescriptions: TaskDescriptions;
   isSubmitted: boolean;
   onToggle: (labourerId: number, day: number) => void;
   onRateOverride: (labourerId: number, day: number, rate: number | undefined) => void;
+  onTaskChange: (labourerId: number, day: number, task: string) => void;
 }
 
 const CasualCard = memo(function CasualCard({
-  labourer, year, month, daysInMonth, firstDow, casualGrid, rateOverrides,
-  isSubmitted, onToggle, onRateOverride,
+  labourer, year, month, daysInMonth, firstDow, casualGrid, rateOverrides, taskDescriptions,
+  isSubmitted, onToggle, onRateOverride, onTaskChange,
 }: CasualCardProps) {
-  const [rateSheetDay, setRateSheetDay] = useState<number | null>(null);
+  const [detailDay, setDetailDay] = useState<number | null>(null);
 
   const now            = new Date();
   const todayDay       = now.getDate();
@@ -570,7 +604,7 @@ const CasualCard = memo(function CasualCard({
                 style={[styles.calDayBtn, { backgroundColor: STATUS_BG[status] }, isToday && status === 'A' && styles.calDayToday]}
                 onPress={() => { if (!isSubmitted) onToggle(labourer.id, day); }}
                 onLongPress={() => {
-                  if (!isSubmitted && status === 'P' && !isFuture) setRateSheetDay(day);
+                  if (!isSubmitted && status === 'P' && !isFuture) setDetailDay(day);
                 }}
                 activeOpacity={0.7}
                 disabled={isSubmitted || isFuture}
@@ -586,21 +620,25 @@ const CasualCard = memo(function CasualCard({
         })}
       </View>
       <Text style={styles.rateHint}>
-        Default rate: Ksh {labourer.defaultDailyRate}/day · Long-press a P day to override rate
+        Default: Ksh {labourer.defaultDailyRate}/day · Long-press P day to set task &amp; rate
       </Text>
 
-      <RateOverrideSheet
-        visible={rateSheetDay !== null}
+      <DayDetailsSheet
+        visible={detailDay !== null}
         labourerName={labourer.name}
-        day={rateSheetDay ?? 1}
+        day={detailDay ?? 1}
         month={month}
         year={year}
-        currentRate={rateSheetCurrentRate}
+        currentRate={detailDay != null ? (rateOverrides[gridKey(labourer.id, detailDay)] ?? labourer.defaultDailyRate) : labourer.defaultDailyRate}
         defaultRate={labourer.defaultDailyRate}
-        onSave={(rate) => {
-          if (rateSheetDay != null) onRateOverride(labourer.id, rateSheetDay, rate);
+        currentTask={detailDay != null ? (taskDescriptions[gridKey(labourer.id, detailDay)] ?? '') : ''}
+        onSave={(rate, task) => {
+          if (detailDay != null) {
+            onRateOverride(labourer.id, detailDay, rate);
+            onTaskChange(labourer.id, detailDay, task);
+          }
         }}
-        onClose={() => setRateSheetDay(null)}
+        onClose={() => setDetailDay(null)}
       />
     </View>
   );
@@ -623,8 +661,9 @@ export default function AttendanceScreen() {
   const [casuals,        setCasuals]        = useState<CasualLabourerDto[]>([]);
   const [workersLoaded,  setWorkersLoaded]  = useState(false);
   const [grid,           setGrid]           = useState<AttendanceGrid>({});
-  const [casualGrid,     setCasualGrid]     = useState<AttendanceGrid>({});
-  const [rateOverrides,  setRateOverrides]  = useState<RateOverrides>({});
+  const [casualGrid,      setCasualGrid]      = useState<AttendanceGrid>({});
+  const [rateOverrides,   setRateOverrides]   = useState<RateOverrides>({});
+  const [taskDescriptions, setTaskDescriptions] = useState<TaskDescriptions>({});
   const [notes,          setNotes]          = useState<NotesMap>({});
   const [localReportId,  setLocalReportId]  = useState<number | null>(null);
   const [isLoaded,       setIsLoaded]       = useState(false);
@@ -692,7 +731,7 @@ export default function AttendanceScreen() {
             if ((serverReport.casualAttendance?.length ?? 0) > 0) {
               await saveCasualAttendance(report.id, serverReport.casualAttendance.map((ca: {
                 casualLabourerId: number; casualLabourerName: string;
-                dayOfMonth: number; present: boolean; status: string; rateOverride: number | null;
+                dayOfMonth: number; present: boolean; status: string; rateOverride: number | null; taskDescription: string | null;
               }) => ({
                 casual_labourer_id: ca.casualLabourerId,
                 labourer_name: ca.casualLabourerName,
@@ -700,6 +739,7 @@ export default function AttendanceScreen() {
                 present: ca.present ? 1 : 0,
                 status: ca.status,
                 rate_override: ca.rateOverride ?? null,
+                task_description: ca.taskDescription ?? null,
               })));
             }
 
@@ -738,14 +778,19 @@ export default function AttendanceScreen() {
       const casualRows = await getCasualAttendance(report.id);
       const newCasualGrid: AttendanceGrid = {};
       const newRateOverrides: RateOverrides = {};
+      const newTaskDescriptions: TaskDescriptions = {};
       for (const ca of casualRows) {
         newCasualGrid[gridKey(ca.casual_labourer_id, ca.day_of_month)] = ca.status as AttendanceStatus;
         if (ca.rate_override != null) {
           newRateOverrides[gridKey(ca.casual_labourer_id, ca.day_of_month)] = ca.rate_override;
         }
+        if (ca.task_description) {
+          newTaskDescriptions[gridKey(ca.casual_labourer_id, ca.day_of_month)] = ca.task_description;
+        }
       }
       setCasualGrid(newCasualGrid);
       setRateOverrides(newRateOverrides);
+      setTaskDescriptions(newTaskDescriptions);
 
       setIsLoaded(true);
       setTimeout(() => { skipSaveRef.current = false; }, 0);
@@ -758,6 +803,7 @@ export default function AttendanceScreen() {
     currentGrid: AttendanceGrid,
     currentCasualGrid: AttendanceGrid,
     currentRateOverrides: RateOverrides,
+    currentTaskDescriptions: TaskDescriptions,
     currentNotes: NotesMap,
     reportId: number,
     currentWorkers: WorkerDto[],
@@ -794,6 +840,7 @@ export default function AttendanceScreen() {
             present: status === 'P' ? 1 : 0,
             status,
             rate_override: currentRateOverrides[gridKey(labourer.id, day)] ?? null,
+            task_description: currentTaskDescriptions[gridKey(labourer.id, day)] ?? null,
           });
         }
       }
@@ -815,10 +862,10 @@ export default function AttendanceScreen() {
     const days = getDaysInMonth(year, month);
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      performSave(grid, casualGrid, rateOverrides, notes, localReportId, workers, casuals, days);
+      performSave(grid, casualGrid, rateOverrides, taskDescriptions, notes, localReportId, workers, casuals, days);
     }, 500);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, [grid, casualGrid, rateOverrides, notes, isLoaded, localReportId, workers, casuals]);
+  }, [grid, casualGrid, rateOverrides, taskDescriptions, notes, isLoaded, localReportId, workers, casuals]);
 
   const handleToggle = useCallback((workerId: number, day: number) => {
     setGrid(prev => {
@@ -839,6 +886,15 @@ export default function AttendanceScreen() {
       const next = { ...prev };
       if (rate === undefined) { delete next[gridKey(labourerId, day)]; }
       else { next[gridKey(labourerId, day)] = rate; }
+      return next;
+    });
+  }, []);
+
+  const handleTaskChange = useCallback((labourerId: number, day: number, task: string) => {
+    setTaskDescriptions(prev => {
+      const next = { ...prev };
+      if (!task) { delete next[gridKey(labourerId, day)]; }
+      else { next[gridKey(labourerId, day)] = task; }
       return next;
     });
   }, []);
@@ -948,9 +1004,11 @@ export default function AttendanceScreen() {
                   daysInMonth={daysInMonth} firstDow={firstDow}
                   casualGrid={casualGrid}
                   rateOverrides={rateOverrides}
+                  taskDescriptions={taskDescriptions}
                   isSubmitted={isSubmitted}
                   onToggle={handleToggleCasual}
                   onRateOverride={handleRateChange}
+                  onTaskChange={handleTaskChange}
                 />
               ))}
             </>
@@ -972,11 +1030,13 @@ export default function AttendanceScreen() {
         visible={showDayAttendance}
         day={selectedDay} year={year} month={month}
         workers={workers} casuals={casuals}
-        grid={grid} casualGrid={casualGrid} rateOverrides={rateOverrides}
+        grid={grid} casualGrid={casualGrid}
+        rateOverrides={rateOverrides} taskDescriptions={taskDescriptions}
         isSubmitted={isSubmitted}
         onToggle={handleToggle}
         onToggleCasual={handleToggleCasual}
         onRateChange={handleRateChange}
+        onTaskChange={handleTaskChange}
         onClose={() => setShowDayAttendance(false)}
       />
     </KeyboardAvoidingView>
@@ -1108,4 +1168,9 @@ const styles = StyleSheet.create({
   attBadgeText:         { fontSize: 13, fontWeight: '800' },
   doneBtn:              { marginTop: 14, backgroundColor: '#2d6a4f', borderRadius: 10, paddingVertical: 13, alignItems: 'center' },
   doneBtnText:          { fontSize: 15, fontWeight: '700', color: '#fff' },
+  dayTaskInput: {
+    borderWidth: 1, borderColor: '#e0e0e0', borderRadius: 6,
+    paddingHorizontal: 8, paddingVertical: 4, fontSize: 12, color: '#555',
+    backgroundColor: '#fafafa', marginBottom: 4, minWidth: 90, textAlign: 'right',
+  },
 });

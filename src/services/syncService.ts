@@ -122,6 +122,7 @@ async function syncSection(
           present: status === 'P',
           status,
           rateOverride: ca.rate_override ?? null,
+          taskDescription: ca.task_description ?? null,
         };
       }));
       break;

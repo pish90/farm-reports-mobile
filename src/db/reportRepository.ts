@@ -423,6 +423,7 @@ export interface LocalCasualAttendanceRecord {
   present: number;
   status: string;
   rate_override: number | null;
+  task_description: string | null;
 }
 
 export type CasualAttendanceInput = Omit<LocalCasualAttendanceRecord, 'id' | 'report_id'>;
@@ -437,9 +438,9 @@ export async function saveCasualAttendance(
     for (const r of records) {
       await db.runAsync(
         `INSERT INTO local_casual_attendance
-           (report_id, casual_labourer_id, labourer_name, day_of_month, present, status, rate_override)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [reportId, r.casual_labourer_id, r.labourer_name, r.day_of_month, r.present, r.status, r.rate_override ?? null],
+           (report_id, casual_labourer_id, labourer_name, day_of_month, present, status, rate_override, task_description)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [reportId, r.casual_labourer_id, r.labourer_name, r.day_of_month, r.present, r.status, r.rate_override ?? null, r.task_description ?? null],
       );
     }
   });
