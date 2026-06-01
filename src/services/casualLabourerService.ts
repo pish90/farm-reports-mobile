@@ -1,8 +1,11 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { getDb } from '../db/database';
-import { CasualLabourerDto, CasualLabourerPaymentDto, CasualLabourerSummaryDto } from '../types';
+import { CasualLabourerDto, CasualLabourerPaymentDto, CasualLabourerSummaryDto, CasualPayrollEntry } from '../types';
 import apiClient from './apiClient';
+
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8080/api';
 
 interface AddCasualLabourerParams {
   name: string;
@@ -117,6 +120,19 @@ export async function deletePayment(
   await apiClient.delete(`/farms/${farmId}/casual-labourers/${labourerId}/payments/${paymentId}`);
 }
 
+// ── Payroll (JSON list) ───────────────────────────────────────────────────────
+
+export async function getCasualPayroll(
+  farmId: number,
+  year: number,
+  month: number,
+): Promise<CasualPayrollEntry[]> {
+  const res = await apiClient.get(`/farms/${farmId}/casual-labourers/payroll`, {
+    params: { year, month },
+  });
+  return res.data.data as CasualPayrollEntry[];
+}
+
 // ── Export ────────────────────────────────────────────────────────────────────
 
 export async function downloadAndShareMonthlyExcel(
@@ -124,24 +140,24 @@ export async function downloadAndShareMonthlyExcel(
   year: number,
   month: number,
 ): Promise<void> {
-  const res = await apiClient.get(`/farms/${farmId}/casual-labourers/export`, {
-    params: { year, month },
-    responseType: 'arraybuffer',
-  });
-
-  const bytes = new Uint8Array(res.data as ArrayBuffer);
-  let binary = '';
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  const base64 = btoa(binary);
-
+  const token = await AsyncStorage.getItem('auth_token');
   const fileName = `casual-labour-${year}-${String(month).padStart(2, '0')}.xlsx`;
   const fileUri = (FileSystem.cacheDirectory ?? '') + fileName;
 
-  await FileSystem.writeAsStringAsync(fileUri, base64, {
-    encoding: FileSystem.EncodingType.Base64,
-  });
+  const result = await FileSystem.downloadAsync(
+    `${BASE_URL}/farms/${farmId}/casual-labourers/export?year=${year}&month=${month}`,
+    fileUri,
+    {
+      headers: {
+        Authorization: token ? `Bearer ${token}` : '',
+        'ngrok-skip-browser-warning': 'true',
+      },
+    },
+  );
+
+  if (result.status !== 200) {
+    throw new Error(`Server returned ${result.status}. Please try again.`);
+  }
 
   await Sharing.shareAsync(fileUri, {
     mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',

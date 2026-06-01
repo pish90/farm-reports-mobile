@@ -178,6 +178,19 @@ export interface CasualLabourerSummaryDto {
   payments: CasualLabourerPaymentDto[];
 }
 
+export interface CasualPayrollEntry {
+  labourerId: number;
+  name: string;
+  phone: string | null;
+  photoBase64: string | null;
+  photoMimeType: string | null;
+  defaultDailyRate: number;
+  daysPresent: number;
+  monthEarnings: number;
+  allTimePaid: number;
+  outstanding: number;
+}
+
 export type AttendanceStackParamList = {
   AttendanceHome: undefined;
   Workers: undefined;

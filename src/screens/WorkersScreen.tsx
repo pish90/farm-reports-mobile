@@ -27,11 +27,12 @@ import {
   downloadAndShareMonthlyExcel,
   getCasualLabourerSummary,
   getCasualLabourers,
+  getCasualPayroll,
   recordPayment,
 } from '../services/casualLabourerService';
 import { WorkerDto, addWorker, deactivateWorker, getWorkers } from '../services/workerService';
 import { useAuth } from '../store/AuthContext';
-import { CasualLabourerDto, CasualLabourerPaymentDto, CasualLabourerSummaryDto } from '../types';
+import { CasualLabourerDto, CasualLabourerPaymentDto, CasualLabourerSummaryDto, CasualPayrollEntry } from '../types';
 
 // ─── Tab toggle ───────────────────────────────────────────────────────────────
 
@@ -240,91 +241,221 @@ function AddCasualLabourerModal({ visible, onAdd, onCancel }: {
   );
 }
 
-// ─── Export month picker modal ────────────────────────────────────────────────
+// ─── Casual Payroll Report Modal ──────────────────────────────────────────────
 
-function ExportModal({ visible, farmId, onClose }: { visible: boolean; farmId: number; onClose: () => void }) {
+const MONTH_NAMES_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const MONTH_NAMES_LONG  = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+function CasualPayrollModal({ visible, farmId, onClose }: { visible: boolean; farmId: number; onClose: () => void }) {
   const now = new Date();
-  const [year,  setYear]  = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth() + 1);
+  const [year,    setYear]    = useState(now.getFullYear());
+  const [month,   setMonth]   = useState(now.getMonth() + 1);
+  const [rows,    setRows]    = useState<CasualPayrollEntry[]>([]);
   const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [error,   setError]   = useState<string | null>(null);
 
-  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  useEffect(() => {
+    if (!visible) return;
+    loadPayroll();
+  }, [visible, year, month, farmId]);
 
-  async function handleExport() {
+  async function loadPayroll() {
     setLoading(true);
+    setError(null);
     try {
-      await downloadAndShareMonthlyExcel(farmId, year, month);
+      const data = await getCasualPayroll(farmId, year, month);
+      setRows(data);
     } catch (e: any) {
-      Alert.alert('Export failed', e.message ?? 'Could not generate the report. Please try again.');
+      setError(e.message ?? 'Failed to load payroll data.');
     } finally {
       setLoading(false);
     }
   }
 
+  async function handleExport() {
+    setExporting(true);
+    try {
+      await downloadAndShareMonthlyExcel(farmId, year, month);
+    } catch (e: any) {
+      Alert.alert('Export failed', e.message ?? 'Could not generate the file. Please try again.');
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  const totalEarned      = rows.reduce((s, r) => s + Number(r.monthEarnings), 0);
+  const totalOutstanding = rows.reduce((s, r) => s + Number(r.outstanding), 0);
+
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={exportStyles.overlay}>
-        <View style={exportStyles.sheet} elevation={10}>
-          <Text style={exportStyles.title}>Export Casual Labour Report</Text>
-
-          <Text style={exportStyles.label}>Year</Text>
-          <View style={exportStyles.stepper}>
-            <TouchableOpacity onPress={() => setYear(y => y - 1)} hitSlop={8} style={exportStyles.stepBtn}>
-              <Feather name="minus" size={18} color="#2d6a4f" />
-            </TouchableOpacity>
-            <Text style={exportStyles.stepVal}>{year}</Text>
-            <TouchableOpacity onPress={() => setYear(y => y + 1)} hitSlop={8} style={exportStyles.stepBtn}>
-              <Feather name="plus" size={18} color="#2d6a4f" />
-            </TouchableOpacity>
-          </View>
-
-          <Text style={exportStyles.label}>Month</Text>
-          <View style={exportStyles.monthGrid}>
-            {MONTHS.map((m, i) => (
-              <TouchableOpacity
-                key={m}
-                style={[exportStyles.monthBtn, month === i + 1 && exportStyles.monthBtnActive]}
-                onPress={() => setMonth(i + 1)}
-              >
-                <Text style={[exportStyles.monthText, month === i + 1 && exportStyles.monthTextActive]}>{m}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          <View style={exportStyles.actions}>
-            <TouchableOpacity style={exportStyles.cancelBtn} onPress={onClose}>
-              <Text style={exportStyles.cancelText}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={exportStyles.exportBtn} onPress={handleExport} disabled={loading}>
-              {loading
-                ? <ActivityIndicator size="small" color="#fff" />
-                : <><Feather name="download" size={16} color="#fff" style={{ marginRight: 6 }} /><Text style={exportStyles.exportText}>Export</Text></>}
-            </TouchableOpacity>
-          </View>
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <SafeAreaView style={payrollStyles.root}>
+        {/* Header */}
+        <View style={payrollStyles.header}>
+          <TouchableOpacity onPress={onClose} hitSlop={8}>
+            <Feather name="x" size={22} color="#333" />
+          </TouchableOpacity>
+          <Text style={payrollStyles.headerTitle}>Casual Labour Report</Text>
+          <TouchableOpacity
+            style={[payrollStyles.exportBtn, exporting && { opacity: 0.5 }]}
+            onPress={handleExport}
+            disabled={exporting || loading}
+            hitSlop={4}
+          >
+            {exporting
+              ? <ActivityIndicator size="small" color="#2d6a4f" />
+              : <><Feather name="download" size={14} color="#2d6a4f" /><Text style={payrollStyles.exportBtnText}>Excel</Text></>}
+          </TouchableOpacity>
         </View>
-      </View>
+
+        {/* Month selector */}
+        <View style={payrollStyles.monthRow}>
+          <TouchableOpacity onPress={() => {
+            if (month === 1) { setMonth(12); setYear(y => y - 1); }
+            else setMonth(m => m - 1);
+          }} style={payrollStyles.arrow} hitSlop={8}>
+            <Feather name="chevron-left" size={20} color="#2d6a4f" />
+          </TouchableOpacity>
+          <Text style={payrollStyles.monthLabel}>{MONTH_NAMES_LONG[month - 1]} {year}</Text>
+          <TouchableOpacity onPress={() => {
+            if (month === 12) { setMonth(1); setYear(y => y + 1); }
+            else setMonth(m => m + 1);
+          }} style={payrollStyles.arrow} hitSlop={8}>
+            <Feather name="chevron-right" size={20} color="#2d6a4f" />
+          </TouchableOpacity>
+        </View>
+
+        {loading ? (
+          <View style={payrollStyles.centered}>
+            <ActivityIndicator size="large" color="#2d6a4f" />
+          </View>
+        ) : error ? (
+          <View style={payrollStyles.centered}>
+            <Feather name="alert-triangle" size={32} color="#e53e3e" />
+            <Text style={payrollStyles.errorText}>{error}</Text>
+            <TouchableOpacity style={payrollStyles.retryBtn} onPress={loadPayroll}>
+              <Text style={payrollStyles.retryText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <>
+            {/* Summary strip */}
+            <View style={payrollStyles.summaryStrip}>
+              <View style={payrollStyles.summaryItem}>
+                <Text style={payrollStyles.summaryVal}>{rows.length}</Text>
+                <Text style={payrollStyles.summaryLbl}>Labourers</Text>
+              </View>
+              <View style={payrollStyles.summaryDiv} />
+              <View style={payrollStyles.summaryItem}>
+                <Text style={[payrollStyles.summaryVal, { color: '#2d6a4f' }]}>
+                  Ksh {totalEarned.toLocaleString()}
+                </Text>
+                <Text style={payrollStyles.summaryLbl}>Month Earnings</Text>
+              </View>
+              <View style={payrollStyles.summaryDiv} />
+              <View style={payrollStyles.summaryItem}>
+                <Text style={[payrollStyles.summaryVal, { color: totalOutstanding > 0 ? '#b45309' : '#2d6a4f' }]}>
+                  Ksh {totalOutstanding.toLocaleString()}
+                </Text>
+                <Text style={payrollStyles.summaryLbl}>Outstanding</Text>
+              </View>
+            </View>
+
+            {/* Column headers */}
+            <View style={payrollStyles.colHeader}>
+              <Text style={[payrollStyles.colHdr, { flex: 2 }]}>Labourer</Text>
+              <Text style={[payrollStyles.colHdr, { width: 60, textAlign: 'center' }]}>Days</Text>
+              <Text style={[payrollStyles.colHdr, { width: 90, textAlign: 'right' }]}>Earned</Text>
+              <Text style={[payrollStyles.colHdr, { width: 90, textAlign: 'right' }]}>Paid</Text>
+              <Text style={[payrollStyles.colHdr, { width: 90, textAlign: 'right' }]}>Balance</Text>
+            </View>
+
+            {rows.length === 0 ? (
+              <View style={payrollStyles.centered}>
+                <Feather name="user-check" size={44} color="#ccc" />
+                <Text style={payrollStyles.emptyText}>No casual labourers for this period.</Text>
+              </View>
+            ) : (
+              <ScrollView contentContainerStyle={{ paddingBottom: 24 }}>
+                {rows.map(r => {
+                  const photoUri = r.photoBase64
+                    ? `data:${r.photoMimeType ?? 'image/jpeg'};base64,${r.photoBase64}`
+                    : null;
+                  const isOwed = Number(r.outstanding) > 0;
+                  return (
+                    <View key={r.labourerId} style={payrollStyles.row}>
+                      {/* Avatar */}
+                      <View style={payrollStyles.avatar}>
+                        {photoUri
+                          ? <Image source={{ uri: photoUri }} style={payrollStyles.avatarImg} />
+                          : <Text style={payrollStyles.avatarInitials}>
+                              {r.name.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)}
+                            </Text>}
+                      </View>
+                      {/* Name + rate */}
+                      <View style={{ flex: 2, marginRight: 4 }}>
+                        <Text style={payrollStyles.rowName} numberOfLines={1}>{r.name}</Text>
+                        <Text style={payrollStyles.rowRate}>Ksh {r.defaultDailyRate}/day</Text>
+                      </View>
+                      {/* Days */}
+                      <Text style={[payrollStyles.rowNum, { width: 60, textAlign: 'center' }]}>{r.daysPresent}</Text>
+                      {/* Earned */}
+                      <Text style={[payrollStyles.rowNum, { width: 90, textAlign: 'right' }]}>
+                        {Number(r.monthEarnings).toLocaleString()}
+                      </Text>
+                      {/* Paid */}
+                      <Text style={[payrollStyles.rowNum, { width: 90, textAlign: 'right', color: '#2d6a4f' }]}>
+                        {Number(r.allTimePaid).toLocaleString()}
+                      </Text>
+                      {/* Balance */}
+                      <Text style={[payrollStyles.rowNum, { width: 90, textAlign: 'right', fontWeight: '700', color: isOwed ? '#b45309' : '#2d6a4f' }]}>
+                        {Number(r.outstanding).toLocaleString()}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </ScrollView>
+            )}
+          </>
+        )}
+      </SafeAreaView>
     </Modal>
   );
 }
 
-const exportStyles = StyleSheet.create({
-  overlay:     { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
-  sheet:       { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, paddingBottom: Platform.OS === 'ios' ? 40 : 24 },
-  title:       { fontSize: 17, fontWeight: '700', color: '#1a1a1a', marginBottom: 20 },
-  label:       { fontSize: 13, fontWeight: '600', color: '#555', marginBottom: 8 },
-  stepper:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 24, marginBottom: 20 },
-  stepBtn:     { padding: 8, borderRadius: 8, backgroundColor: '#f0f0f0' },
-  stepVal:     { fontSize: 20, fontWeight: '700', color: '#1a1a1a', minWidth: 60, textAlign: 'center' },
-  monthGrid:   { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 24 },
-  monthBtn:    { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: '#ddd', backgroundColor: '#fafafa' },
-  monthBtnActive: { backgroundColor: '#2d6a4f', borderColor: '#2d6a4f' },
-  monthText:   { fontSize: 13, color: '#555', fontWeight: '500' },
-  monthTextActive: { color: '#fff' },
-  actions:     { flexDirection: 'row', gap: 12 },
-  cancelBtn:   { flex: 1, paddingVertical: 13, borderRadius: 10, borderWidth: 1, borderColor: '#ddd', alignItems: 'center' },
-  cancelText:  { fontSize: 15, color: '#555', fontWeight: '600' },
-  exportBtn:   { flex: 2, flexDirection: 'row', paddingVertical: 13, borderRadius: 10, backgroundColor: '#2d6a4f', alignItems: 'center', justifyContent: 'center' },
-  exportText:  { fontSize: 15, color: '#fff', fontWeight: '700' },
+const payrollStyles = StyleSheet.create({
+  root:         { flex: 1, backgroundColor: '#f5f7f9' },
+  header:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, backgroundColor: '#fff', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#eee' },
+  headerTitle:  { fontSize: 17, fontWeight: '700', color: '#1a1a1a' },
+  exportBtn:    { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: '#2d6a4f', backgroundColor: '#e8f5ef' },
+  exportBtnText:{ fontSize: 13, fontWeight: '700', color: '#2d6a4f' },
+
+  monthRow:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, backgroundColor: '#fff', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#eee', gap: 16 },
+  arrow:        { padding: 4 },
+  monthLabel:   { fontSize: 16, fontWeight: '700', color: '#1a1a1a', minWidth: 160, textAlign: 'center' },
+
+  summaryStrip: { flexDirection: 'row', backgroundColor: '#fff', marginVertical: 10, marginHorizontal: 12, borderRadius: 12, paddingVertical: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2 },
+  summaryItem:  { flex: 1, alignItems: 'center' },
+  summaryVal:   { fontSize: 15, fontWeight: '800', color: '#1a1a1a' },
+  summaryLbl:   { fontSize: 10, color: '#888', marginTop: 2 },
+  summaryDiv:   { width: 1, backgroundColor: '#eee' },
+
+  colHeader:    { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, backgroundColor: '#eef2f0', marginHorizontal: 12, borderRadius: 8, marginBottom: 4 },
+  colHdr:       { fontSize: 10, fontWeight: '700', color: '#555', textTransform: 'uppercase', letterSpacing: 0.5 },
+
+  row:          { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', marginHorizontal: 12, marginBottom: 1, paddingHorizontal: 10, paddingVertical: 12, borderRadius: 8 },
+  avatar:       { width: 36, height: 36, borderRadius: 18, backgroundColor: '#ede9fe', alignItems: 'center', justifyContent: 'center', marginRight: 8, overflow: 'hidden' },
+  avatarImg:    { width: 36, height: 36, borderRadius: 18 },
+  avatarInitials:{ fontSize: 13, fontWeight: '800', color: '#7c3aed' },
+  rowName:      { fontSize: 14, fontWeight: '600', color: '#1a1a1a' },
+  rowRate:      { fontSize: 11, color: '#aaa', marginTop: 1 },
+  rowNum:       { fontSize: 13, color: '#1a1a1a' },
+
+  centered:     { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  errorText:    { marginTop: 12, color: '#e53e3e', textAlign: 'center', fontSize: 14 },
+  retryBtn:     { marginTop: 16, paddingHorizontal: 24, paddingVertical: 10, backgroundColor: '#2d6a4f', borderRadius: 8 },
+  retryText:    { color: '#fff', fontWeight: '600', fontSize: 14 },
+  emptyText:    { fontSize: 14, color: '#aaa', marginTop: 14, textAlign: 'center' },
 });
 
 // ─── Casual Labourer Detail Modal ─────────────────────────────────────────────
@@ -630,10 +761,10 @@ export default function WorkersScreen() {
   const [isLoaded,  setIsLoaded]  = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const [showAddWorker,  setShowAddWorker]  = useState(false);
-  const [showAddCasual,  setShowAddCasual]  = useState(false);
-  const [showExport,     setShowExport]     = useState(false);
-  const [detailLabourer, setDetailLabourer] = useState<CasualLabourerDto | null>(null);
+  const [showAddWorker,    setShowAddWorker]    = useState(false);
+  const [showAddCasual,    setShowAddCasual]    = useState(false);
+  const [showPayrollReport, setShowPayrollReport] = useState(false);
+  const [detailLabourer,   setDetailLabourer]   = useState<CasualLabourerDto | null>(null);
 
   const load = useCallback(async () => {
     if (!farmId) return;
@@ -692,9 +823,9 @@ export default function WorkersScreen() {
       {activeTab === 'casual' && (
         <View style={styles.casualToolbar}>
           <Text style={styles.casualCount}>{casuals.length} labourer{casuals.length !== 1 ? 's' : ''}</Text>
-          <TouchableOpacity style={styles.exportBtn} onPress={() => setShowExport(true)} activeOpacity={0.8}>
-            <Feather name="download" size={14} color="#2d6a4f" />
-            <Text style={styles.exportBtnText}>Export</Text>
+          <TouchableOpacity style={styles.exportBtn} onPress={() => setShowPayrollReport(true)} activeOpacity={0.8}>
+            <Feather name="bar-chart-2" size={14} color="#2d6a4f" />
+            <Text style={styles.exportBtnText}>Payroll Report</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -743,7 +874,7 @@ export default function WorkersScreen() {
 
       <AddWorkerModal visible={showAddWorker} onAdd={handleAddWorker} onCancel={() => setShowAddWorker(false)} />
       <AddCasualLabourerModal visible={showAddCasual} onAdd={handleAddCasual} onCancel={() => setShowAddCasual(false)} />
-      <ExportModal visible={showExport} farmId={farmId} onClose={() => setShowExport(false)} />
+      <CasualPayrollModal visible={showPayrollReport} farmId={farmId} onClose={() => setShowPayrollReport(false)} />
       <CasualLabourerDetailModal
         visible={detailLabourer !== null}
         labourer={detailLabourer}
