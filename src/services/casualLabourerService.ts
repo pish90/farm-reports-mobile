@@ -144,9 +144,8 @@ export async function downloadAndShareMonthlyExcel(
   const fileName = `casual-labour-${year}-${String(month).padStart(2, '0')}.xlsx`;
   const fileUri = (FileSystem.cacheDirectory ?? '') + fileName;
 
-  const downloadResumable = FileSystem.createDownloadResumable(
+  const response = await fetch(
     `${BASE_URL}/farms/${farmId}/casual-labourers/export?year=${year}&month=${month}`,
-    fileUri,
     {
       headers: {
         Authorization: token ? `Bearer ${token}` : '',
@@ -155,10 +154,22 @@ export async function downloadAndShareMonthlyExcel(
     },
   );
 
-  const result = await downloadResumable.downloadAsync();
-  if (!result || result.status !== 200) {
-    throw new Error(`Download failed (${result?.status ?? 'no response'}). Please try again.`);
+  if (!response.ok) {
+    throw new Error(`Server returned ${response.status}. Please try again.`);
   }
+
+  const arrayBuffer = await response.arrayBuffer();
+  const bytes = new Uint8Array(arrayBuffer);
+  const CHUNK = 8192;
+  let binary = '';
+  for (let i = 0; i < bytes.byteLength; i += CHUNK) {
+    binary += String.fromCharCode(...(bytes.subarray(i, i + CHUNK) as any));
+  }
+  const base64 = btoa(binary);
+
+  await FileSystem.writeAsStringAsync(fileUri, base64, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
 
   await Sharing.shareAsync(fileUri, {
     mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
