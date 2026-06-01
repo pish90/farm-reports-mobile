@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as FileSystem from 'expo-file-system';
+import { File, Paths } from 'expo-file-system/next';
 import * as Sharing from 'expo-sharing';
 import { getDb } from '../db/database';
 import { CasualLabourerDto, CasualLabourerPaymentDto, CasualLabourerSummaryDto, CasualPayrollEntry } from '../types';
@@ -141,8 +141,6 @@ export async function downloadAndShareMonthlyExcel(
   month: number,
 ): Promise<void> {
   const token = await AsyncStorage.getItem('auth_token');
-  const fileName = `casual-labour-${year}-${String(month).padStart(2, '0')}.xlsx`;
-  const fileUri = (FileSystem.cacheDirectory ?? '') + fileName;
 
   const response = await fetch(
     `${BASE_URL}/farms/${farmId}/casual-labourers/export?year=${year}&month=${month}`,
@@ -160,16 +158,12 @@ export async function downloadAndShareMonthlyExcel(
 
   const arrayBuffer = await response.arrayBuffer();
   const bytes = new Uint8Array(arrayBuffer);
-  const CHUNK = 8192;
-  let binary = '';
-  for (let i = 0; i < bytes.byteLength; i += CHUNK) {
-    binary += String.fromCharCode(...(bytes.subarray(i, i + CHUNK) as any));
-  }
-  const base64 = btoa(binary);
 
-  await FileSystem.writeAsStringAsync(fileUri, base64, { encoding: 'base64' });
+  const fileName = `casual-labour-${year}-${String(month).padStart(2, '0')}.xlsx`;
+  const file = new File(Paths.cache, fileName);
+  file.write(bytes);
 
-  await Sharing.shareAsync(fileUri, {
+  await Sharing.shareAsync(file.uri, {
     mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     dialogTitle: 'Export Casual Labour Report',
     UTI: 'com.microsoft.excel.xlsx',

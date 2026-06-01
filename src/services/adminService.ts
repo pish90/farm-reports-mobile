@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as FileSystem from 'expo-file-system/legacy';
+import { File, Paths } from 'expo-file-system/next';
 import * as Sharing from 'expo-sharing';
 import apiClient from './apiClient';
 import { AdminReport, FarmLiveStatus, ServerExpense } from '../types';
@@ -90,20 +90,14 @@ export const adminService = {
 
   async downloadAllFarmsExcel(year: number, month: number): Promise<void> {
     const token = await AsyncStorage.getItem('auth_token');
-    const filename = `farm-reports-${year}-${String(month).padStart(2, '0')}.xlsx`;
-    const localUri = (FileSystem.cacheDirectory ?? '') + filename;
-
-    const result = await FileSystem.downloadAsync(
+    const response = await fetch(
       `${BASE_URL}/admin/export/excel?year=${year}&month=${month}`,
-      localUri,
       { headers: { Authorization: `Bearer ${token}`, 'ngrok-skip-browser-warning': 'true' } },
     );
-
-    if (result.status !== 200) {
-      throw new Error('Download failed');
-    }
-
-    await Sharing.shareAsync(result.uri, {
+    if (!response.ok) throw new Error('Download failed');
+    const file = new File(Paths.cache, `farm-reports-${year}-${String(month).padStart(2, '0')}.xlsx`);
+    file.write(new Uint8Array(await response.arrayBuffer()));
+    await Sharing.shareAsync(file.uri, {
       mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       dialogTitle: 'Save Farm Reports',
       UTI: 'com.microsoft.excel.xlsx',
@@ -112,21 +106,15 @@ export const adminService = {
 
   async downloadFarmExcel(reportId: number, farmName: string, year: number, month: number): Promise<void> {
     const token = await AsyncStorage.getItem('auth_token');
-    const safeName = farmName.replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/, '');
-    const filename = `${safeName}_${year}-${String(month).padStart(2, '0')}.xlsx`;
-    const localUri = (FileSystem.cacheDirectory ?? '') + filename;
-
-    const result = await FileSystem.downloadAsync(
+    const safeName = farmName.replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+    const response = await fetch(
       `${BASE_URL}/reports/${reportId}/export`,
-      localUri,
       { headers: { Authorization: `Bearer ${token}`, 'ngrok-skip-browser-warning': 'true' } },
     );
-
-    if (result.status !== 200) {
-      throw new Error('Download failed');
-    }
-
-    await Sharing.shareAsync(result.uri, {
+    if (!response.ok) throw new Error('Download failed');
+    const file = new File(Paths.cache, `${safeName}_${year}-${String(month).padStart(2, '0')}.xlsx`);
+    file.write(new Uint8Array(await response.arrayBuffer()));
+    await Sharing.shareAsync(file.uri, {
       mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       dialogTitle: 'Save Farm Report',
       UTI: 'com.microsoft.excel.xlsx',
