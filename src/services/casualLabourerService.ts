@@ -144,7 +144,7 @@ export async function downloadAndShareMonthlyExcel(
   const fileName = `casual-labour-${year}-${String(month).padStart(2, '0')}.xlsx`;
   const fileUri = (FileSystem.cacheDirectory ?? '') + fileName;
 
-  const result = await FileSystem.downloadAsync(
+  const downloadResumable = FileSystem.createDownloadResumable(
     `${BASE_URL}/farms/${farmId}/casual-labourers/export?year=${year}&month=${month}`,
     fileUri,
     {
@@ -155,8 +155,9 @@ export async function downloadAndShareMonthlyExcel(
     },
   );
 
-  if (result.status !== 200) {
-    throw new Error(`Server returned ${result.status}. Please try again.`);
+  const result = await downloadResumable.downloadAsync();
+  if (!result || result.status !== 200) {
+    throw new Error(`Download failed (${result?.status ?? 'no response'}). Please try again.`);
   }
 
   await Sharing.shareAsync(fileUri, {
