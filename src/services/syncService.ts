@@ -2,6 +2,7 @@ import { AppState, AppStateStatus } from 'react-native';
 import { getDb } from '../db/database';
 import {
   SyncQueueEntry,
+  getCasualAttendance,
   getFullReport,
   getLocalReport,
   getPendingSyncs,
@@ -107,6 +108,22 @@ async function syncSection(
       await apiClient.put(`/reports/${serverReportId}/livestock-notes`, {
         notes: notes.map((n) => ({ subjectId: 0, subjectKey: n.category, note: n.note })),
       });
+      break;
+    }
+
+    case 'casual-attendance': {
+      const casual = await getCasualAttendance(localReportId);
+      if (casual.length === 0) break;
+      await apiClient.put(`/reports/${serverReportId}/casual-attendance`, casual.map((ca) => {
+        const status = ca.status ?? (ca.present === 1 ? 'P' : 'A');
+        return {
+          casualLabourerId: ca.casual_labourer_id,
+          dayOfMonth: ca.day_of_month,
+          present: status === 'P',
+          status,
+          rateOverride: ca.rate_override ?? null,
+        };
+      }));
       break;
     }
 

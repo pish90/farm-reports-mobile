@@ -26,7 +26,9 @@ export type AuditActionType =
   | 'REPORT_CREATED' | 'REPORT_SUBMITTED' | 'REPORT_REOPENED'
   | 'ATTENDANCE_UPDATED' | 'LIVESTOCK_UPDATED' | 'MILK_UPDATED'
   | 'EXPENSES_UPDATED' | 'ATTENDANCE_NOTES_UPDATED' | 'LIVESTOCK_NOTES_UPDATED'
-  | 'WORKER_ADDED' | 'WORKER_DEACTIVATED' | 'EXCEL_EXPORTED';
+  | 'WORKER_ADDED' | 'WORKER_DEACTIVATED'
+  | 'CASUAL_LABOURER_ADDED' | 'CASUAL_LABOURER_DEACTIVATED' | 'CASUAL_ATTENDANCE_UPDATED'
+  | 'EXCEL_EXPORTED';
 
 export interface AuditLog {
   id: number;
@@ -135,6 +137,26 @@ export interface FarmLiveStatus {
   expenseCount: number;
   expenseTotal: number;
   livestockEntered: boolean;
+}
+
+export interface CasualLabourerDto {
+  id: number;
+  name: string;
+  phone: string | null;
+  defaultDailyRate: number;
+  photoBase64: string | null;
+  photoMimeType: string | null;
+}
+
+export interface CasualAttendanceRecord {
+  id: number;
+  casualLabourerId: number;
+  casualLabourerName: string;
+  dayOfMonth: number;
+  present: boolean;
+  status: string;
+  rateOverride: number | null;
+  effectiveRate: number;
 }
 
 export type AttendanceStackParamList = {

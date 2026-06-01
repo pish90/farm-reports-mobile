@@ -132,6 +132,29 @@ export async function initDatabase(): Promise<void> {
       name    TEXT    NOT NULL,
       PRIMARY KEY (id, farm_id)
     );
+
+    CREATE TABLE IF NOT EXISTS casual_labourers_cache (
+      id                 INTEGER NOT NULL,
+      farm_id            INTEGER NOT NULL,
+      name               TEXT    NOT NULL,
+      phone              TEXT,
+      default_daily_rate REAL    NOT NULL,
+      photo_base64       TEXT,
+      photo_mime_type    TEXT,
+      PRIMARY KEY (id, farm_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS local_casual_attendance (
+      id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+      report_id          INTEGER NOT NULL,
+      casual_labourer_id INTEGER NOT NULL,
+      labourer_name      TEXT    NOT NULL,
+      day_of_month       INTEGER NOT NULL,
+      present            INTEGER NOT NULL DEFAULT 0,
+      status             TEXT    NOT NULL DEFAULT 'A',
+      rate_override      REAL,
+      UNIQUE (report_id, casual_labourer_id, day_of_month)
+    );
   `);
 
   const migrations = [

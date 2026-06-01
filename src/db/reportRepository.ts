@@ -412,6 +412,46 @@ export async function getReportSectionSummary(
   };
 }
 
+// ─── Casual attendance ────────────────────────────────────────────────────────
+
+export interface LocalCasualAttendanceRecord {
+  id: number;
+  report_id: number;
+  casual_labourer_id: number;
+  labourer_name: string;
+  day_of_month: number;
+  present: number;
+  status: string;
+  rate_override: number | null;
+}
+
+export type CasualAttendanceInput = Omit<LocalCasualAttendanceRecord, 'id' | 'report_id'>;
+
+export async function saveCasualAttendance(
+  reportId: number,
+  records: CasualAttendanceInput[],
+): Promise<void> {
+  const db = getDb();
+  await db.withTransactionAsync(async () => {
+    await db.runAsync('DELETE FROM local_casual_attendance WHERE report_id = ?', [reportId]);
+    for (const r of records) {
+      await db.runAsync(
+        `INSERT INTO local_casual_attendance
+           (report_id, casual_labourer_id, labourer_name, day_of_month, present, status, rate_override)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [reportId, r.casual_labourer_id, r.labourer_name, r.day_of_month, r.present, r.status, r.rate_override ?? null],
+      );
+    }
+  });
+}
+
+export async function getCasualAttendance(reportId: number): Promise<LocalCasualAttendanceRecord[]> {
+  return getDb().getAllAsync<LocalCasualAttendanceRecord>(
+    'SELECT * FROM local_casual_attendance WHERE report_id = ? ORDER BY casual_labourer_id, day_of_month',
+    [reportId],
+  );
+}
+
 // ─── Sync queue ───────────────────────────────────────────────────────────────
 
 export async function markSectionDirty(reportId: number, section: string): Promise<void> {
