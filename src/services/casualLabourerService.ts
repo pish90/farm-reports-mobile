@@ -167,9 +167,7 @@ export async function downloadAndShareMonthlyExcel(
   }
   const base64 = btoa(binary);
 
-  await FileSystem.writeAsStringAsync(fileUri, base64, {
-    encoding: FileSystem.EncodingType.Base64,
-  });
+  await FileSystem.writeAsStringAsync(fileUri, base64, { encoding: 'base64' });
 
   await Sharing.shareAsync(fileUri, {
     mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
