@@ -46,6 +46,7 @@ async function syncSection(
 
   switch (entry.section) {
     case 'attendance': {
+      if (full.attendance.length === 0) break; // Never wipe server attendance with an empty payload
       await apiClient.put(`/reports/${serverReportId}/attendance`, full.attendance.map((a) => {
         const status = a.status ?? (a.present === 1 ? 'P' : 'A');
         return {

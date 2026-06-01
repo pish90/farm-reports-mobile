@@ -385,6 +385,7 @@ export default function AttendanceScreen() {
          WHERE report_id = ? AND section = 'attendance' AND synced = 0`,
         [report.id],
       );
+      let serverAttendanceCount = -1; // -1 = not checked (offline/no report)
       if ((pendingRow?.count ?? 0) === 0) {
         try {
           const res = await apiClient.get('/reports', {
@@ -392,10 +393,11 @@ export default function AttendanceScreen() {
           });
           const serverReport = res.data?.data;
           if (serverReport?.id) {
+            serverAttendanceCount = serverReport.attendance?.length ?? 0;
             if (!report.server_report_id) {
               await updateServerReportId(report.id, serverReport.id);
             }
-            if (serverReport.attendance?.length > 0) {
+            if (serverAttendanceCount > 0) {
               await saveAttendance(
                 report.id,
                 serverReport.attendance.map((a: {
@@ -426,6 +428,11 @@ export default function AttendanceScreen() {
       const rows = await getDb().getAllAsync<{
         worker_id: number; day_of_month: number; present: number; status: string | null;
       }>('SELECT worker_id, day_of_month, present, status FROM local_attendance WHERE report_id = ?', [report.id]);
+
+      // If local has attendance but server has none, re-queue a sync to restore server data
+      if (rows.length > 0 && serverAttendanceCount === 0) {
+        await markSectionDirty(report.id, 'attendance');
+      }
 
       const newGrid: AttendanceGrid = {};
       for (const r of rows) {
