@@ -105,7 +105,11 @@ export default function CasualAttendanceScreen() {
             </View>
           }
           renderItem={({ item }) => (
-            <View style={styles.card}>
+            <TouchableOpacity
+              style={styles.card}
+              onPress={() => navigation.navigate('CreateWorkSession', { session: item })}
+              activeOpacity={0.85}
+            >
               <View style={styles.cardLeft}>
                 <Text style={styles.cardDate}>{formatDate(item.sessionDate)}</Text>
                 <Text style={styles.cardActivity}>{item.activity}</Text>
@@ -118,11 +122,14 @@ export default function CasualAttendanceScreen() {
               </View>
               <View style={styles.cardRight}>
                 <Text style={styles.cardTotal}>Ksh {totalForSession(item).toLocaleString()}</Text>
-                <TouchableOpacity onPress={() => handleDelete(item)} hitSlop={8} style={{ marginTop: 8 }}>
-                  <Feather name="trash-2" size={16} color="#f87171" />
-                </TouchableOpacity>
+                <View style={styles.cardActions}>
+                  <Feather name="edit-2" size={14} color="#7c3aed" />
+                  <TouchableOpacity onPress={(e) => { e.stopPropagation?.(); handleDelete(item); }} hitSlop={8}>
+                    <Feather name="trash-2" size={15} color="#f87171" />
+                  </TouchableOpacity>
+                </View>
               </View>
-            </View>
+            </TouchableOpacity>
           )}
         />
       )}
@@ -182,8 +189,9 @@ const styles = StyleSheet.create({
   cardMetaText: { fontSize: 12, color: '#888' },
   cardMetaSep:  { fontSize: 12, color: '#ccc' },
 
-  cardRight: { alignItems: 'flex-end', marginLeft: 12 },
-  cardTotal: { fontSize: 15, fontWeight: '800', color: '#7c3aed' },
+  cardRight:   { alignItems: 'flex-end', marginLeft: 12 },
+  cardTotal:   { fontSize: 15, fontWeight: '800', color: '#7c3aed' },
+  cardActions: { flexDirection: 'row', gap: 14, marginTop: 10, alignItems: 'center' },
 
   fab: {
     position: 'absolute', bottom: 28, right: 20,

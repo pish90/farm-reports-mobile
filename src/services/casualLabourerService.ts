@@ -106,6 +106,15 @@ export async function createWorkSession(
   return res.data.data as CasualWorkSessionDto;
 }
 
+export async function updateWorkSession(
+  farmId: number,
+  sessionId: number,
+  request: CreateWorkSessionRequest,
+): Promise<CasualWorkSessionDto> {
+  const res = await apiClient.put(`/farms/${farmId}/casual-labourers/work-sessions/${sessionId}`, request);
+  return res.data.data as CasualWorkSessionDto;
+}
+
 export async function deleteWorkSession(farmId: number, sessionId: number): Promise<void> {
   await apiClient.delete(`/farms/${farmId}/casual-labourers/work-sessions/${sessionId}`);
 }

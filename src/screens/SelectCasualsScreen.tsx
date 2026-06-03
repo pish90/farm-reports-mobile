@@ -5,9 +5,11 @@ import {
   Alert,
   FlatList,
   Image,
+  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -182,8 +184,17 @@ export default function SelectCasualsScreen() {
 
       {/* Add casual modal */}
       <Modal visible={showAdd} transparent animationType="slide" onRequestClose={() => setShowAdd(false)}>
-        <Pressable style={styles.backdrop} onPress={() => setShowAdd(false)} />
-        <View style={styles.addSheet}>
+        <View style={{ flex: 1 }}>
+          <Pressable style={styles.backdrop} onPress={() => setShowAdd(false)} />
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.addSheetWrap}
+          >
+            <ScrollView
+              contentContainerStyle={styles.addSheet}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
           <View style={styles.handle} />
           <Text style={styles.addSheetTitle}>Add Casual Labourer</Text>
 
@@ -228,6 +239,8 @@ export default function SelectCasualsScreen() {
           >
             {adding ? <ActivityIndicator color="#fff" /> : <Text style={styles.addSaveBtnText}>Add Casual</Text>}
           </TouchableOpacity>
+            </ScrollView>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
     </View>
@@ -298,8 +311,10 @@ const styles = StyleSheet.create({
   doneBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
 
   backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)' },
-  addSheet: {
+  addSheetWrap: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
+  },
+  addSheet: {
     backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20,
     padding: 20, paddingBottom: Platform.OS === 'ios' ? 36 : 24,
   },

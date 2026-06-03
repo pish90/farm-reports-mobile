@@ -4,6 +4,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
@@ -66,7 +67,12 @@ function RecordPaymentModal({ visible, labourer, farmId, onRecorded, onClose }: 
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose} />
+      <View style={{ flex: 1 }}>
+        <Pressable style={styles.backdrop} onPress={onClose} />
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.payModalWrap}
+        >
       <View style={styles.payModal}>
         <View style={styles.handle} />
         <Text style={styles.payModalTitle}>Record Payment</Text>
@@ -107,6 +113,8 @@ function RecordPaymentModal({ visible, labourer, farmId, onRecorded, onClose }: 
             {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.confirmBtnText}>Record</Text>}
           </TouchableOpacity>
         </View>
+      </View>
+        </KeyboardAvoidingView>
       </View>
     </Modal>
   );
@@ -346,8 +354,8 @@ const styles = StyleSheet.create({
 
   // Payment modal
   backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)' },
+  payModalWrap: { position: 'absolute', bottom: 0, left: 0, right: 0 },
   payModal: {
-    position: 'absolute', bottom: 0, left: 0, right: 0,
     backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20,
     padding: 20, paddingBottom: Platform.OS === 'ios' ? 36 : 24,
   },

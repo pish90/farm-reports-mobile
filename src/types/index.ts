@@ -235,7 +235,7 @@ export type AttendanceStackParamList = {
   AttendanceHome: undefined;
   SalariedAttendance: undefined;
   CasualHome: undefined;
-  CreateWorkSession: { selectedCasuals?: Array<{ id: number; name: string; rateOverride?: number }> } | undefined;
+  CreateWorkSession: { selectedCasuals?: Array<{ id: number; name: string; rateOverride?: number }>; session?: CasualWorkSessionDto } | undefined;
   SelectCasuals: { currentSelection: Array<{ id: number; rateOverride?: number }>; defaultRate: number };
   CasualReport: undefined;
   Workers: undefined;

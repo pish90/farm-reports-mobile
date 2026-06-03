@@ -544,7 +544,7 @@ function CasualLabourerDetailModal({
           <View style={{ width: 30 }} />
         </View>
 
-        <ScrollView contentContainerStyle={detailStyles.scroll} keyboardShouldPersistTaps="handled">
+        <ScrollView contentContainerStyle={detailStyles.scroll} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
           {/* Profile */}
           <View style={detailStyles.profile}>
             <View style={detailStyles.avatarWrap}>
