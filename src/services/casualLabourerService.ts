@@ -2,7 +2,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { File, Paths } from 'expo-file-system/next';
 import * as Sharing from 'expo-sharing';
 import { getDb } from '../db/database';
-import { CasualLabourerDto, CasualLabourerPaymentDto, CasualLabourerSummaryDto, CasualPayrollEntry } from '../types';
+import {
+  CasualLabourerDto,
+  CasualLabourerPaymentDto,
+  CasualLabourerReportDto,
+  CasualLabourerSummaryDto,
+  CasualPayrollEntry,
+  CasualWorkSessionDto,
+  CreateWorkSessionRequest,
+} from '../types';
 import apiClient from './apiClient';
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8080/api';
@@ -10,7 +18,6 @@ const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8080/api';
 interface AddCasualLabourerParams {
   name: string;
   phone: string | null;
-  defaultDailyRate: number;
   photoBase64: string | null;
   photoMimeType: string | null;
 }
@@ -24,9 +31,9 @@ interface RecordPaymentParams {
 async function getCachedCasualLabourers(farmId: number): Promise<CasualLabourerDto[] | null> {
   const rows = await getDb().getAllAsync<{
     id: number; name: string; phone: string | null;
-    default_daily_rate: number; photo_base64: string | null; photo_mime_type: string | null;
+    photo_base64: string | null; photo_mime_type: string | null;
   }>(
-    'SELECT id, name, phone, default_daily_rate, photo_base64, photo_mime_type FROM casual_labourers_cache WHERE farm_id = ? ORDER BY name',
+    'SELECT id, name, phone, photo_base64, photo_mime_type FROM casual_labourers_cache WHERE farm_id = ? ORDER BY name',
     [farmId],
   );
   if (rows.length === 0) return null;
@@ -34,7 +41,6 @@ async function getCachedCasualLabourers(farmId: number): Promise<CasualLabourerD
     id: r.id,
     name: r.name,
     phone: r.phone,
-    defaultDailyRate: r.default_daily_rate,
     photoBase64: r.photo_base64,
     photoMimeType: r.photo_mime_type,
   }));
@@ -46,10 +52,9 @@ async function setCachedCasualLabourers(farmId: number, labourers: CasualLaboure
     await db.runAsync('DELETE FROM casual_labourers_cache WHERE farm_id = ?', [farmId]);
     for (const l of labourers) {
       await db.runAsync(
-        `INSERT INTO casual_labourers_cache
-           (id, farm_id, name, phone, default_daily_rate, photo_base64, photo_mime_type)
+        `INSERT INTO casual_labourers_cache (id, farm_id, name, phone, default_daily_rate, photo_base64, photo_mime_type)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [l.id, farmId, l.name, l.phone ?? null, l.defaultDailyRate, l.photoBase64 ?? null, l.photoMimeType ?? null],
+        [l.id, farmId, l.name, l.phone ?? null, 0, l.photoBase64 ?? null, l.photoMimeType ?? null],
       );
     }
   });
@@ -76,7 +81,6 @@ export async function addCasualLabourer(
   const res = await apiClient.post(`/farms/${farmId}/casual-labourers`, {
     name: params.name,
     phone: params.phone || null,
-    defaultDailyRate: params.defaultDailyRate,
     photoBase64: params.photoBase64 || null,
     photoMimeType: params.photoMimeType || null,
   });
@@ -87,7 +91,33 @@ export async function deactivateCasualLabourer(farmId: number, labourerId: numbe
   await apiClient.delete(`/farms/${farmId}/casual-labourers/${labourerId}`);
 }
 
-// ── Summary ───────────────────────────────────────────────────────────────────
+// ── Work Sessions ─────────────────────────────────────────────────────────────
+
+export async function getWorkSessions(farmId: number): Promise<CasualWorkSessionDto[]> {
+  const res = await apiClient.get(`/farms/${farmId}/casual-labourers/work-sessions`);
+  return res.data.data as CasualWorkSessionDto[];
+}
+
+export async function createWorkSession(
+  farmId: number,
+  request: CreateWorkSessionRequest,
+): Promise<CasualWorkSessionDto> {
+  const res = await apiClient.post(`/farms/${farmId}/casual-labourers/work-sessions`, request);
+  return res.data.data as CasualWorkSessionDto;
+}
+
+export async function deleteWorkSession(farmId: number, sessionId: number): Promise<void> {
+  await apiClient.delete(`/farms/${farmId}/casual-labourers/work-sessions/${sessionId}`);
+}
+
+// ── All-Summaries Report ──────────────────────────────────────────────────────
+
+export async function getAllSummaries(farmId: number): Promise<CasualLabourerReportDto[]> {
+  const res = await apiClient.get(`/farms/${farmId}/casual-labourers/all-summaries`);
+  return res.data.data as CasualLabourerReportDto[];
+}
+
+// ── Summary (per-labourer) ────────────────────────────────────────────────────
 
 export async function getCasualLabourerSummary(
   farmId: number,

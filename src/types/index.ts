@@ -143,9 +143,50 @@ export interface CasualLabourerDto {
   id: number;
   name: string;
   phone: string | null;
-  defaultDailyRate: number;
   photoBase64: string | null;
   photoMimeType: string | null;
+}
+
+export interface CasualWorkEntryDto {
+  id: number;
+  casualLabourerId: number;
+  labourerName: string;
+  rateOverride: number | null;
+  effectiveRate: number;
+}
+
+export interface CasualWorkSessionDto {
+  id: number;
+  sessionDate: string; // YYYY-MM-DD
+  activity: string;
+  defaultDailyRate: number;
+  entries: CasualWorkEntryDto[];
+}
+
+export interface CreateWorkSessionRequest {
+  sessionDate: string; // YYYY-MM-DD
+  activity: string;
+  defaultDailyRate: number;
+  entries: Array<{ casualLabourerId: number; rateOverride?: number }>;
+}
+
+export interface CasualLabourerReportWorkEntryLine {
+  sessionId: number;
+  sessionDate: string; // YYYY-MM-DD
+  activity: string;
+  amount: number;
+}
+
+export interface CasualLabourerReportDto {
+  labourerId: number;
+  name: string;
+  phone: string | null;
+  photoBase64: string | null;
+  photoMimeType: string | null;
+  allTimeEarned: number;
+  allTimePaid: number;
+  balance: number;
+  workEntries: CasualLabourerReportWorkEntryLine[];
 }
 
 export interface CasualAttendanceRecord {
@@ -184,7 +225,6 @@ export interface CasualPayrollEntry {
   phone: string | null;
   photoBase64: string | null;
   photoMimeType: string | null;
-  defaultDailyRate: number;
   daysPresent: number;
   monthEarnings: number;
   allTimePaid: number;
@@ -193,6 +233,11 @@ export interface CasualPayrollEntry {
 
 export type AttendanceStackParamList = {
   AttendanceHome: undefined;
+  SalariedAttendance: undefined;
+  CasualHome: undefined;
+  CreateWorkSession: { selectedCasuals?: Array<{ id: number; name: string; rateOverride?: number }> } | undefined;
+  SelectCasuals: { currentSelection: Array<{ id: number; rateOverride?: number }>; defaultRate: number };
+  CasualReport: undefined;
   Workers: undefined;
 };
 

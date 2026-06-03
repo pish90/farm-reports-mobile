@@ -6,7 +6,12 @@ import SyncStatusBadge from '../components/shared/SyncStatusBadge';
 import AdminDashboardScreen from '../screens/AdminDashboardScreen';
 import AdminFarmDetailScreen from '../screens/AdminFarmDetailScreen';
 import AuditLogScreen from '../screens/AuditLogScreen';
+import AttendanceLandingScreen from '../screens/AttendanceLandingScreen';
 import AttendanceScreen from '../screens/AttendanceScreen';
+import CasualAttendanceScreen from '../screens/CasualAttendanceScreen';
+import CreateWorkSessionScreen from '../screens/CreateWorkSessionScreen';
+import SelectCasualsScreen from '../screens/SelectCasualsScreen';
+import CasualReportScreen from '../screens/CasualReportScreen';
 import ExpensesScreen from '../screens/expenses/ExpensesScreen';
 import LivestockScreen from '../screens/livestock/LivestockScreen';
 import MilkScreen from '../screens/milk/MilkScreen';
@@ -72,16 +77,36 @@ const ExpensesStack   = createNativeStackNavigator<ExpensesStackParamList>();
 function AttendanceNavigator() {
   return (
     <AttendanceStack.Navigator screenOptions={{ headerShown: false }}>
-      <AttendanceStack.Screen name="AttendanceHome" component={AttendanceScreen} />
+      <AttendanceStack.Screen name="AttendanceHome" component={AttendanceLandingScreen} />
+      <AttendanceStack.Screen
+        name="SalariedAttendance"
+        component={AttendanceScreen}
+        options={{ headerShown: true, title: 'Salaried Attendance', headerTitleStyle: { fontWeight: '600', fontSize: 17 }, headerTintColor: '#2d6a4f' }}
+      />
+      <AttendanceStack.Screen
+        name="CasualHome"
+        component={CasualAttendanceScreen}
+        options={{ headerShown: true, title: 'Casual Attendance', headerTitleStyle: { fontWeight: '600', fontSize: 17 }, headerTintColor: '#7c3aed' }}
+      />
+      <AttendanceStack.Screen
+        name="CreateWorkSession"
+        component={CreateWorkSessionScreen}
+        options={{ headerShown: true, title: 'Work Session', headerTitleStyle: { fontWeight: '600', fontSize: 17 }, headerTintColor: '#7c3aed' }}
+      />
+      <AttendanceStack.Screen
+        name="SelectCasuals"
+        component={SelectCasualsScreen}
+        options={{ headerShown: true, title: 'Choose Casuals', headerTitleStyle: { fontWeight: '600', fontSize: 17 }, headerTintColor: '#7c3aed' }}
+      />
+      <AttendanceStack.Screen
+        name="CasualReport"
+        component={CasualReportScreen}
+        options={{ headerShown: true, title: 'Casual Report', headerTitleStyle: { fontWeight: '600', fontSize: 17 }, headerTintColor: '#7c3aed' }}
+      />
       <AttendanceStack.Screen
         name="Workers"
         component={WorkersScreen}
-        options={{
-          headerShown: true,
-          title: 'Manage Workers',
-          headerTitleStyle: { fontWeight: '600', fontSize: 17 },
-          headerTintColor: '#2d6a4f',
-        }}
+        options={{ headerShown: true, title: 'Manage Workers', headerTitleStyle: { fontWeight: '600', fontSize: 17 }, headerTintColor: '#2d6a4f' }}
       />
     </AttendanceStack.Navigator>
   );

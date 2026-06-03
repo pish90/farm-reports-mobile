@@ -18,8 +18,6 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { getCasualAttendance } from '../db/reportRepository';
-import { getDb } from '../db/database';
 import {
   addCasualLabourer,
   deactivateCasualLabourer,
@@ -96,7 +94,6 @@ function CasualRow({
         <Text style={rowStyles.name}>{labourer.name}</Text>
         {labourer.phone ? <Text style={rowStyles.sub}>{labourer.phone}</Text> : null}
       </View>
-      <Text style={rowStyles.rate}>Ksh {labourer.defaultDailyRate}/day</Text>
       <TouchableOpacity style={rowStyles.deleteBtn} onPress={() => onDelete(labourer)} hitSlop={8}>
         <Feather name="trash-2" size={18} color="#e53e3e" />
       </TouchableOpacity>
@@ -151,18 +148,17 @@ function AddWorkerModal({ visible, onAdd, onCancel }: { visible: boolean; onAdd:
 
 function AddCasualLabourerModal({ visible, onAdd, onCancel }: {
   visible: boolean;
-  onAdd: (p: { name: string; phone: string | null; defaultDailyRate: number; photoBase64: string | null; photoMimeType: string | null }) => Promise<void>;
+  onAdd: (p: { name: string; phone: string | null; photoBase64: string | null; photoMimeType: string | null }) => Promise<void>;
   onCancel: () => void;
 }) {
   const [name, setName]   = useState('');
   const [phone, setPhone] = useState('');
-  const [rate, setRate]   = useState('');
   const [photoUri, setPhotoUri]         = useState<string | null>(null);
   const [photoBase64, setPhotoBase64]   = useState<string | null>(null);
   const [photoMimeType, setPhotoMimeType] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  function reset() { setName(''); setPhone(''); setRate(''); setPhotoUri(null); setPhotoBase64(null); setPhotoMimeType(null); }
+  function reset() { setName(''); setPhone(''); setPhotoUri(null); setPhotoBase64(null); setPhotoMimeType(null); }
 
   async function pickPhoto(source: 'camera' | 'library') {
     let result: ImagePicker.ImagePickerResult;
@@ -192,14 +188,13 @@ function AddCasualLabourerModal({ visible, onAdd, onCancel }: {
 
   async function handleSave() {
     const trimmedName = name.trim();
-    const parsedRate  = parseFloat(rate);
-    if (!trimmedName || isNaN(parsedRate) || parsedRate <= 0) return;
+    if (!trimmedName) return;
     setSaving(true);
-    try { await onAdd({ name: trimmedName, phone: phone.trim() || null, defaultDailyRate: parsedRate, photoBase64, photoMimeType }); reset(); }
+    try { await onAdd({ name: trimmedName, phone: phone.trim() || null, photoBase64, photoMimeType }); reset(); }
     finally { setSaving(false); }
   }
 
-  const canSave = name.trim().length > 0 && parseFloat(rate) > 0 && !saving;
+  const canSave = name.trim().length > 0 && !saving;
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={() => { reset(); onCancel(); }}>
@@ -222,9 +217,6 @@ function AddCasualLabourerModal({ visible, onAdd, onCancel }: {
               <TextInput style={casualModalStyles.input} placeholder="Samuel Kamau" placeholderTextColor="#bbb" value={name} onChangeText={setName} maxLength={100} autoFocus />
               <Text style={casualModalStyles.label}>Phone (optional)</Text>
               <TextInput style={casualModalStyles.input} placeholderTextColor="#bbb" value={phone} onChangeText={setPhone} keyboardType="phone-pad" maxLength={20} />
-              <Text style={casualModalStyles.label}>Default daily rate</Text>
-              <TextInput style={casualModalStyles.input} placeholder="130" placeholderTextColor="#bbb" value={rate} onChangeText={setRate} keyboardType="numeric" maxLength={8} />
-              <Text style={casualModalStyles.hint}>You can override this on any day.</Text>
               <View style={casualModalStyles.actions}>
                 <TouchableOpacity style={casualModalStyles.cancelBtn} onPress={() => { reset(); onCancel(); }}>
                   <Text style={casualModalStyles.cancelText}>Cancel</Text>
@@ -392,10 +384,9 @@ function CasualPayrollModal({ visible, farmId, onClose }: { visible: boolean; fa
                               {r.name.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)}
                             </Text>}
                       </View>
-                      {/* Name + rate */}
+                      {/* Name */}
                       <View style={{ flex: 2, marginRight: 4 }}>
                         <Text style={payrollStyles.rowName} numberOfLines={1}>{r.name}</Text>
-                        <Text style={payrollStyles.rowRate}>Ksh {r.defaultDailyRate}/day</Text>
                       </View>
                       {/* Days */}
                       <Text style={[payrollStyles.rowNum, { width: 60, textAlign: 'center' }]}>{r.daysPresent}</Text>
@@ -494,22 +485,9 @@ function CasualLabourerDetailModal({
     setLoadingSum(true);
     setSummary(null);
     try {
-      // Compute this-month earnings from local SQLite
-      const localReport = await getDb().getFirstAsync<{ id: number }>(
-        'SELECT id FROM local_reports WHERE farm_id = ? AND year = ? AND month = ?',
-        [farmId, year, month],
-      );
-      if (localReport) {
-        const casual = await getCasualAttendance(localReport.id);
-        const mine = casual.filter(ca => ca.casual_labourer_id === labourer.id && ca.present === 1);
-        const earned = mine.reduce((sum, ca) => sum + (ca.rate_override ?? labourer.defaultDailyRate), 0);
-        setMonthEarned(earned);
-      } else {
-        setMonthEarned(0);
-      }
-      // Fetch all-time summary from server
       const s = await getCasualLabourerSummary(farmId, labourer.id);
       setSummary(s);
+      setMonthEarned(s.allTimeEarned);
     } catch {
       // Offline — show what we have
     } finally {
@@ -554,8 +532,6 @@ function CasualLabourerDetailModal({
     ? `data:${labourer.photoMimeType ?? 'image/jpeg'};base64,${labourer.photoBase64}`
     : null;
 
-  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <SafeAreaView style={detailStyles.root}>
@@ -582,13 +558,12 @@ function CasualLabourerDetailModal({
             </View>
             <Text style={detailStyles.name}>{labourer.name}</Text>
             {labourer.phone ? <Text style={detailStyles.phone}>{labourer.phone}</Text> : null}
-            <Text style={detailStyles.defaultRate}>Default rate: Ksh {labourer.defaultDailyRate}/day</Text>
           </View>
 
           {/* Summary cards */}
           <View style={detailStyles.cards}>
             <View style={[detailStyles.card, detailStyles.cardGreen]}>
-              <Text style={detailStyles.cardLabel}>{months[month - 1]} Earnings</Text>
+              <Text style={detailStyles.cardLabel}>All-time Earned</Text>
               <Text style={detailStyles.cardValue}>Ksh {monthEarned.toLocaleString()}</Text>
             </View>
             <View style={[detailStyles.card, detailStyles.cardBlue]}>
@@ -798,7 +773,7 @@ export default function WorkersScreen() {
     ]);
   }, [farmId, load]);
 
-  const handleAddCasual = useCallback(async (p: { name: string; phone: string | null; defaultDailyRate: number; photoBase64: string | null; photoMimeType: string | null }) => {
+  const handleAddCasual = useCallback(async (p: { name: string; phone: string | null; photoBase64: string | null; photoMimeType: string | null }) => {
     if (!farmId) return;
     await addCasualLabourer(farmId, p);
     setShowAddCasual(false);
