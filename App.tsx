@@ -7,6 +7,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { initDatabase } from './src/db/database';
 import { navigationRef } from './src/navigation/navigationRef';
 import RootNavigator from './src/navigation';
+import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { initAutoSync } from './src/services/syncService';
 import { AuthProvider } from './src/store/AuthContext';
 import { SyncProvider } from './src/store/SyncContext';
@@ -35,17 +36,19 @@ export default function App() {
   }
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaProvider>
-        <AuthProvider>
-          <SyncProvider>
-            <NavigationContainer ref={navigationRef}>
-              <RootNavigator />
-              <StatusBar style="auto" />
-            </NavigationContainer>
-          </SyncProvider>
-        </AuthProvider>
-      </SafeAreaProvider>
-    </GestureHandlerRootView>
+    <ErrorBoundary>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <SafeAreaProvider>
+          <AuthProvider>
+            <SyncProvider>
+              <NavigationContainer ref={navigationRef}>
+                <RootNavigator />
+                <StatusBar style="auto" />
+              </NavigationContainer>
+            </SyncProvider>
+          </AuthProvider>
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
+    </ErrorBoundary>
   );
 }
