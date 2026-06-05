@@ -27,9 +27,11 @@ import {
   adminService,
   serverExpenseToLocal,
 } from '../services/adminService';
+import { getWorkSessions } from '../services/casualLabourerService';
 import {
   AdminReport,
   AdminStackParamList,
+  CasualWorkSessionDto,
   ServerExpense,
 } from '../types';
 import { useAuth } from '../store/AuthContext';
@@ -182,6 +184,7 @@ export default function AdminFarmDetailScreen({ route, navigation }: Props) {
   const [report,       setReport]       = useState<AdminReport | null>(null);
   const [noReport,     setNoReport]     = useState(false);
   const [isLoading,    setIsLoading]    = useState(true);
+  const [workSessions, setWorkSessions] = useState<CasualWorkSessionDto[]>([]);
   const [isSaving,     setIsSaving]     = useState(false);
   const [isExporting,  setIsExporting]  = useState(false);
   const [formVisible,  setFormVisible]  = useState(false);
@@ -217,6 +220,14 @@ export default function AdminFarmDetailScreen({ route, navigation }: Props) {
     loadReport();
     getExpenseCategories().then(setCategories).catch(() => {});
     getBusinessUnits().then(setBusinessUnits).catch(() => {});
+    getWorkSessions(farmId)
+      .then(sessions => setWorkSessions(
+        sessions.filter(s => {
+          const d = new Date(s.sessionDate + 'T00:00:00');
+          return d.getFullYear() === year && d.getMonth() + 1 === month;
+        })
+      ))
+      .catch(() => {});
   }, []);
 
   async function loadReport() {
@@ -526,6 +537,57 @@ export default function AdminFarmDetailScreen({ route, navigation }: Props) {
           ))
         )}
 
+        {/* ── Casual Labour ─────────────────────────────────────────── */}
+        {(() => {
+          const sessionTotal = workSessions.reduce((sum, s) =>
+            sum + s.entries.reduce((es, e) => es + e.effectiveRate, 0), 0);
+          return (
+            <>
+              <SectionHeader
+                title={workSessions.length > 0
+                  ? `Casual Labour  ·  Ksh ${sessionTotal.toLocaleString()}`
+                  : 'Casual Labour'}
+                icon="user-check"
+              />
+              {workSessions.length === 0 ? (
+                <Text style={styles.emptySection}>No casual work sessions this month</Text>
+              ) : (
+                workSessions
+                  .slice()
+                  .sort((a, b) => a.sessionDate.localeCompare(b.sessionDate))
+                  .map(s => {
+                    const sessionAmt = s.entries.reduce((sum, e) => sum + e.effectiveRate, 0);
+                    return (
+                      <View key={s.id} style={styles.casualSessionCard}>
+                        <View style={styles.casualSessionHeader}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.casualSessionDate}>
+                              {new Date(s.sessionDate + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                            </Text>
+                            <Text style={styles.casualSessionActivity}>{s.activity}</Text>
+                          </View>
+                          <Text style={styles.casualSessionTotal}>Ksh {sessionAmt.toLocaleString()}</Text>
+                        </View>
+                        {s.entries.map(e => (
+                          <View key={e.id} style={styles.casualEntryRow}>
+                            <Text style={styles.casualEntryName}>{e.labourerName}</Text>
+                            <Text style={styles.casualEntryRate}>
+                              Ksh {e.effectiveRate.toLocaleString()}
+                              {e.rateOverride != null && <Text style={styles.casualEntryOverride}> *</Text>}
+                            </Text>
+                          </View>
+                        ))}
+                        {s.entries.some(e => e.rateOverride != null) && (
+                          <Text style={styles.casualOverrideHint}>* rate override applied</Text>
+                        )}
+                      </View>
+                    );
+                  })
+              )}
+            </>
+          );
+        })()}
+
         {/* ── Livestock ─────────────────────────────────────────────── */}
         <SectionHeader title="Livestock Returns" icon="tag" />
         {Object.keys(livestockByCategory).length === 0 ? (
@@ -679,6 +741,29 @@ const styles = StyleSheet.create({
 
   // Attendance
   attRow:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#fff', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#f0f0f0' },
+
+  casualSessionCard: {
+    backgroundColor: '#fff', borderRadius: 10, marginBottom: 8,
+    borderWidth: 1, borderColor: '#ede9fe', overflow: 'hidden',
+  },
+  casualSessionHeader: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 12, paddingVertical: 10,
+    backgroundColor: '#faf5ff',
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#ede9fe',
+  },
+  casualSessionDate:     { fontSize: 11, color: '#888', marginBottom: 2 },
+  casualSessionActivity: { fontSize: 14, fontWeight: '700', color: '#5b21b6' },
+  casualSessionTotal:    { fontSize: 14, fontWeight: '800', color: '#7c3aed' },
+  casualEntryRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 12, paddingVertical: 6,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#f5f5f5',
+  },
+  casualEntryName:     { fontSize: 13, color: '#333', flex: 1 },
+  casualEntryRate:     { fontSize: 13, fontWeight: '600', color: '#555' },
+  casualEntryOverride: { color: '#7c3aed' },
+  casualOverrideHint:  { fontSize: 10, color: '#aaa', paddingHorizontal: 12, paddingBottom: 6, fontStyle: 'italic' },
   attName:  { fontSize: 14, color: '#1a1a1a', flex: 1 },
   attCount: { fontSize: 14, fontWeight: '700', color: '#2d6a4f', fontVariant: ['tabular-nums'] },
 
