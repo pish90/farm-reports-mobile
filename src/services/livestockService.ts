@@ -10,7 +10,7 @@ export interface LivestockTypeDto {
 export type GroupedLivestockTypes = Record<string, LivestockTypeDto[]>;
 
 // Fixed display order matching the backend enum
-export const CATEGORY_ORDER = ['CATTLE', 'PIGS', 'SHEEP'] as const;
+export const CATEGORY_ORDER = ['CATTLE', 'PIGS', 'SHEEP', 'GOATS'] as const;
 
 async function getCachedTypes(farmId: number): Promise<GroupedLivestockTypes | null> {
   const db = getDb();
