@@ -46,7 +46,7 @@
     "runtimeVersion": "exposdk:54.0.0",
     "updates": {
       "url": "https://u.expo.dev/bdb6a038-448e-4bd1-977a-b5da6a662739",
-      "fallbackToCacheTimeout": 10000,
+      "fallbackToCacheTimeout": 0,
       "checkAutomatically": "ON_LOAD"
     }
   }
