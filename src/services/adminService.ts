@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { File, Paths } from 'expo-file-system/next';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import apiClient from './apiClient';
 import { AdminReport, FarmLiveStatus, ServerExpense } from '../types';
@@ -27,6 +27,14 @@ export interface ExpenseEntryPayload {
 export interface MilkEntryPayload {
   dayOfMonth: number;
   litres: number;
+}
+
+function uint8ToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 8192) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
+  }
+  return btoa(binary);
 }
 
 export const adminService = {
@@ -95,9 +103,9 @@ export const adminService = {
       { headers: { Authorization: `Bearer ${token}`, 'ngrok-skip-browser-warning': 'true' } },
     );
     if (!response.ok) throw new Error('Download failed');
-    const file = new File(Paths.cache, `farm-reports-${year}-${String(month).padStart(2, '0')}.xlsx`);
-    file.write(new Uint8Array(await response.arrayBuffer()));
-    await Sharing.shareAsync(file.uri, {
+    const fileUri = (FileSystem.cacheDirectory ?? '') + `farm-reports-${year}-${String(month).padStart(2, '0')}.xlsx`;
+    await FileSystem.writeAsStringAsync(fileUri, uint8ToBase64(new Uint8Array(await response.arrayBuffer())), { encoding: 'base64' });
+    await Sharing.shareAsync(fileUri, {
       mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       dialogTitle: 'Save Farm Reports',
       UTI: 'com.microsoft.excel.xlsx',
@@ -112,9 +120,9 @@ export const adminService = {
       { headers: { Authorization: `Bearer ${token}`, 'ngrok-skip-browser-warning': 'true' } },
     );
     if (!response.ok) throw new Error('Download failed');
-    const file = new File(Paths.cache, `${safeName}_${year}-${String(month).padStart(2, '0')}.xlsx`);
-    file.write(new Uint8Array(await response.arrayBuffer()));
-    await Sharing.shareAsync(file.uri, {
+    const fileUri = (FileSystem.cacheDirectory ?? '') + `${safeName}_${year}-${String(month).padStart(2, '0')}.xlsx`;
+    await FileSystem.writeAsStringAsync(fileUri, uint8ToBase64(new Uint8Array(await response.arrayBuffer())), { encoding: 'base64' });
+    await Sharing.shareAsync(fileUri, {
       mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       dialogTitle: 'Save Farm Report',
       UTI: 'com.microsoft.excel.xlsx',

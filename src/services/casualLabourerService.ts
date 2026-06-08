@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { File, Paths } from 'expo-file-system/next';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { getDb } from '../db/database';
 import {
@@ -195,14 +195,17 @@ export async function downloadAndShareMonthlyExcel(
     throw new Error(`Server returned ${response.status}. Please try again.`);
   }
 
-  const arrayBuffer = await response.arrayBuffer();
-  const bytes = new Uint8Array(arrayBuffer);
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 8192) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
+  }
 
   const fileName = `casual-labour-${year}-${String(month).padStart(2, '0')}.xlsx`;
-  const file = new File(Paths.cache, fileName);
-  file.write(bytes);
+  const fileUri = (FileSystem.cacheDirectory ?? '') + fileName;
+  await FileSystem.writeAsStringAsync(fileUri, btoa(binary), { encoding: 'base64' });
 
-  await Sharing.shareAsync(file.uri, {
+  await Sharing.shareAsync(fileUri, {
     mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     dialogTitle: 'Export Casual Labour Report',
     UTI: 'com.microsoft.excel.xlsx',

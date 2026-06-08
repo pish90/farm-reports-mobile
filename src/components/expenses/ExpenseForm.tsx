@@ -1,5 +1,5 @@
 import { Feather } from '@expo/vector-icons';
-import { Directory, File, Paths } from 'expo-file-system/next';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
@@ -237,11 +237,11 @@ export default function ExpenseForm({ visible, year, month, initial, isEditing, 
       const srcUri = result.assets[0].uri;
       let savedUri = srcUri;
       try {
-        const receiptsDir = new Directory(Paths.document, 'receipts');
-        if (!receiptsDir.exists) receiptsDir.create();
-        const destFile = new File(receiptsDir, `receipt_${Date.now()}.jpg`);
-        new File(srcUri).copy(destFile);
-        savedUri = destFile.uri;
+        const receiptsDir = FileSystem.documentDirectory + 'receipts/';
+        await FileSystem.makeDirectoryAsync(receiptsDir, { intermediates: true });
+        const destUri = receiptsDir + `receipt_${Date.now()}.jpg`;
+        await FileSystem.copyAsync({ from: srcUri, to: destUri });
+        savedUri = destUri;
       } catch {
         // copy failed — fall back to the picker URI which still works for this session
       }
