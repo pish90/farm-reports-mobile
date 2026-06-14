@@ -4,6 +4,10 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -11,9 +15,10 @@ import {
 } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import MonthYearSelector from '../components/shared/MonthYearSelector';
 import { deleteWorkSession, getWorkSessions } from '../services/casualLabourerService';
 import { useAuth } from '../store/AuthContext';
-import { AttendanceStackParamList, CasualWorkSessionDto } from '../types';
+import { AttendanceStackParamList, CasualWorkEntryDto, CasualWorkSessionDto } from '../types';
 
 function formatDate(dateStr: string): string {
   const d = new Date(dateStr + 'T00:00:00');
@@ -24,13 +29,125 @@ function totalForSession(session: CasualWorkSessionDto): number {
   return session.entries.reduce((sum, e) => sum + e.effectiveRate, 0);
 }
 
+// ─── Session detail modal ────────────────────────────────────────────────────
+
+function SessionDetailModal({
+  session,
+  onClose,
+}: {
+  session: CasualWorkSessionDto | null;
+  onClose: () => void;
+}) {
+  if (!session) return null;
+  const total = totalForSession(session);
+
+  return (
+    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={detailStyles.backdrop} onPress={onClose} />
+      <View style={detailStyles.sheet}>
+        <View style={detailStyles.handle} />
+
+        {/* Header */}
+        <Text style={detailStyles.activity} numberOfLines={2}>{session.activity}</Text>
+        <View style={detailStyles.metaRow}>
+          <Feather name="calendar" size={13} color="#888" />
+          <Text style={detailStyles.metaText}>{formatDate(session.sessionDate)}</Text>
+          <Text style={detailStyles.metaSep}>·</Text>
+          <Feather name="dollar-sign" size={13} color="#888" />
+          <Text style={detailStyles.metaText}>Default Ksh {session.defaultDailyRate}/day</Text>
+        </View>
+
+        <View style={detailStyles.divider} />
+
+        {/* Worker list */}
+        <ScrollView style={detailStyles.workerList} showsVerticalScrollIndicator={false}>
+          {session.entries.length === 0 && (
+            <Text style={detailStyles.emptyText}>No workers recorded.</Text>
+          )}
+          {session.entries.map((entry: CasualWorkEntryDto) => (
+            <View key={entry.id} style={detailStyles.workerRow}>
+              <Text style={detailStyles.workerName} numberOfLines={1}>{entry.labourerName}</Text>
+              <View style={detailStyles.workerRateWrap}>
+                {entry.rateOverride !== null && (
+                  <View style={detailStyles.overrideBadge}>
+                    <Text style={detailStyles.overrideBadgeText}>override</Text>
+                  </View>
+                )}
+                <Text style={detailStyles.workerRate}>Ksh {entry.effectiveRate.toLocaleString()}</Text>
+              </View>
+            </View>
+          ))}
+        </ScrollView>
+
+        <View style={detailStyles.divider} />
+
+        {/* Total */}
+        <View style={detailStyles.totalRow}>
+          <Text style={detailStyles.totalLabel}>Total</Text>
+          <Text style={detailStyles.totalValue}>Ksh {total.toLocaleString()}</Text>
+        </View>
+
+        <TouchableOpacity style={detailStyles.closeBtn} onPress={onClose} activeOpacity={0.85}>
+          <Text style={detailStyles.closeBtnText}>Close</Text>
+        </TouchableOpacity>
+      </View>
+    </Modal>
+  );
+}
+
+const detailStyles = StyleSheet.create({
+  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)' },
+  sheet: {
+    position: 'absolute', bottom: 0, left: 0, right: 0,
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingBottom: Platform.OS === 'ios' ? 36 : 24,
+    maxHeight: '75%',
+  },
+  handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#e0e0e0', alignSelf: 'center', marginTop: 12, marginBottom: 16 },
+  activity: { fontSize: 18, fontWeight: '700', color: '#1a1a1a', marginBottom: 6 },
+  metaRow:  { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 14 },
+  metaText: { fontSize: 13, color: '#888' },
+  metaSep:  { fontSize: 13, color: '#ccc' },
+  divider:  { height: StyleSheet.hairlineWidth, backgroundColor: '#eee', marginVertical: 10 },
+  workerList: { maxHeight: 260 },
+  emptyText:  { fontSize: 14, color: '#bbb', textAlign: 'center', paddingVertical: 16 },
+  workerRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#f0f0f0',
+  },
+  workerName:     { flex: 1, fontSize: 15, fontWeight: '600', color: '#1a1a1a' },
+  workerRateWrap: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  overrideBadge:  { backgroundColor: '#f3e8ff', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2 },
+  overrideBadgeText: { fontSize: 10, fontWeight: '700', color: '#7c3aed' },
+  workerRate:     { fontSize: 15, fontWeight: '700', color: '#1a1a1a' },
+  totalRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10 },
+  totalLabel: { fontSize: 15, fontWeight: '700', color: '#555' },
+  totalValue: { fontSize: 17, fontWeight: '800', color: '#7c3aed' },
+  closeBtn: {
+    marginTop: 10, paddingVertical: 13,
+    borderRadius: 12, borderWidth: 1, borderColor: '#ddd',
+    alignItems: 'center',
+  },
+  closeBtnText: { fontSize: 15, fontWeight: '600', color: '#666' },
+});
+
+// ─── Main screen ──────────────────────────────────────────────────────────────
+
 export default function CasualAttendanceScreen() {
   const { user } = useAuth();
   const navigation = useNavigation<NativeStackNavigationProp<AttendanceStackParamList>>();
 
-  const [sessions, setSessions] = useState<CasualWorkSessionDto[]>([]);
-  const [loading, setLoading]   = useState(true);
-  const [error, setError]       = useState<string | null>(null);
+  const now = new Date();
+  const [year, setYear]   = useState(now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth() + 1);
+
+  const [sessions, setSessions]         = useState<CasualWorkSessionDto[]>([]);
+  const [loading, setLoading]           = useState(true);
+  const [error, setError]               = useState<string | null>(null);
+  const [detailSession, setDetailSession] = useState<CasualWorkSessionDto | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -44,10 +161,18 @@ export default function CasualAttendanceScreen() {
     }, [user?.farmId]),
   );
 
+  // Filter sessions to selected month
+  const monthSessions = sessions.filter(s => {
+    const [sy, sm] = s.sessionDate.split('-').map(Number);
+    return sy === year && sm === month;
+  });
+
+  const monthTotal = monthSessions.reduce((sum, s) => sum + totalForSession(s), 0);
+
   function handleDelete(session: CasualWorkSessionDto) {
     Alert.alert(
       'Delete Session',
-      `Delete ${session.activity} on ${formatDate(session.sessionDate)}?\n\nThis will remove all ${session.entries.length} worker entries.`,
+      `Delete "${session.activity}" on ${formatDate(session.sessionDate)}?\n\nThis will remove all ${session.entries.length} worker entries.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -67,11 +192,18 @@ export default function CasualAttendanceScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header row */}
-      <View style={styles.headerRow}>
+      {/* Month selector */}
+      <MonthYearSelector
+        year={year}
+        month={month}
+        onChange={(y, m) => { setYear(y); setMonth(m); }}
+      />
+
+      {/* Monthly summary */}
+      <View style={styles.summaryRow}>
         <View>
-          <Text style={styles.headerLabel}>All work sessions</Text>
-          <Text style={styles.headerSub}>{sessions.length} recorded</Text>
+          <Text style={styles.summaryLabel}>Total for {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][month - 1]}</Text>
+          <Text style={styles.summaryTotal}>Ksh {monthTotal.toLocaleString()}</Text>
         </View>
         <TouchableOpacity
           style={styles.reportBtn}
@@ -94,20 +226,20 @@ export default function CasualAttendanceScreen() {
         </View>
       ) : (
         <FlatList
-          data={sessions}
+          data={monthSessions}
           keyExtractor={s => String(s.id)}
           contentContainerStyle={styles.list}
           ListEmptyComponent={
             <View style={styles.emptyWrap}>
               <Feather name="calendar" size={40} color="#ddd" />
-              <Text style={styles.emptyText}>No sessions yet.</Text>
+              <Text style={styles.emptyText}>No sessions this month.</Text>
               <Text style={styles.emptyHint}>Tap + to record a work session.</Text>
             </View>
           }
           renderItem={({ item }) => (
             <TouchableOpacity
               style={styles.card}
-              onPress={() => navigation.navigate('CreateWorkSession', { session: item })}
+              onPress={() => setDetailSession(item)}
               activeOpacity={0.85}
             >
               <View style={styles.cardLeft}>
@@ -123,8 +255,13 @@ export default function CasualAttendanceScreen() {
               <View style={styles.cardRight}>
                 <Text style={styles.cardTotal}>Ksh {totalForSession(item).toLocaleString()}</Text>
                 <View style={styles.cardActions}>
-                  <Feather name="edit-2" size={14} color="#7c3aed" />
-                  <TouchableOpacity onPress={(e) => { e.stopPropagation?.(); handleDelete(item); }} hitSlop={8}>
+                  <TouchableOpacity
+                    onPress={() => navigation.navigate('CreateWorkSession', { session: item })}
+                    hitSlop={8}
+                  >
+                    <Feather name="edit-2" size={15} color="#7c3aed" />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => handleDelete(item)} hitSlop={8}>
                     <Feather name="trash-2" size={15} color="#f87171" />
                   </TouchableOpacity>
                 </View>
@@ -142,6 +279,12 @@ export default function CasualAttendanceScreen() {
       >
         <Feather name="plus" size={24} color="#fff" />
       </TouchableOpacity>
+
+      {/* Session detail modal */}
+      <SessionDetailModal
+        session={detailSession}
+        onClose={() => setDetailSession(null)}
+      />
     </View>
   );
 }
@@ -149,14 +292,14 @@ export default function CasualAttendanceScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f7f9' },
 
-  headerRow: {
+  summaryRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 14,
     backgroundColor: '#fff',
     borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#eee',
   },
-  headerLabel: { fontSize: 14, fontWeight: '700', color: '#1a1a1a' },
-  headerSub:   { fontSize: 12, color: '#888', marginTop: 2 },
+  summaryLabel: { fontSize: 12, color: '#888', marginBottom: 3 },
+  summaryTotal: { fontSize: 20, fontWeight: '800', color: '#7c3aed' },
   reportBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
     paddingHorizontal: 14, paddingVertical: 8,
@@ -191,7 +334,7 @@ const styles = StyleSheet.create({
 
   cardRight:   { alignItems: 'flex-end', marginLeft: 12 },
   cardTotal:   { fontSize: 15, fontWeight: '800', color: '#7c3aed' },
-  cardActions: { flexDirection: 'row', gap: 14, marginTop: 10, alignItems: 'center' },
+  cardActions: { flexDirection: 'row', gap: 16, marginTop: 10, alignItems: 'center' },
 
   fab: {
     position: 'absolute', bottom: 28, right: 20,

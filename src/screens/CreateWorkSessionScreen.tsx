@@ -1,5 +1,5 @@
 import { Feather } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -13,9 +13,10 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { createWorkSession, updateWorkSession } from '../services/casualLabourerService';
+import workSessionDraft from '../store/workSessionDraft';
 import { useAuth } from '../store/AuthContext';
 import { AttendanceStackParamList, CasualWorkSessionDto } from '../types';
 
@@ -73,7 +74,6 @@ function DatePickerModal({ visible, value, onSelect, onClose }: {
         <View style={dpStyles.handle} />
         <Text style={dpStyles.title}>Select Date</Text>
 
-        {/* Month / Year navigation */}
         <View style={dpStyles.navRow}>
           <TouchableOpacity onPress={prevMonth} hitSlop={12} style={dpStyles.navBtn}>
             <Feather name="chevron-left" size={22} color="#7c3aed" />
@@ -84,12 +84,10 @@ function DatePickerModal({ visible, value, onSelect, onClose }: {
           </TouchableOpacity>
         </View>
 
-        {/* Day-of-week header */}
         <View style={dpStyles.dowRow}>
           {DAY_LABELS.map(l => <Text key={l} style={dpStyles.dowLabel}>{l}</Text>)}
         </View>
 
-        {/* Calendar grid */}
         <View style={dpStyles.grid}>
           {cells.map((day, idx) => {
             if (!day) return <View key={`e-${idx}`} style={dpStyles.cell} />;
@@ -172,23 +170,39 @@ export default function CreateWorkSessionScreen() {
   );
   const [saving, setSaving] = useState(false);
 
-  // Update navigation title when in edit mode
   useEffect(() => {
     if (isEditing) navigation.setOptions({ title: 'Edit Work Session' });
   }, [isEditing]);
 
-  // When returning from SelectCasualsScreen, merge in the selected casuals
-  useEffect(() => {
-    const selected = route.params?.selectedCasuals;
-    if (!selected) return;
-    setCasuals(prev => {
-      const prevMap = new Map(prev.map(c => [c.id, c]));
-      return selected.map(s => ({
-        id: s.id, name: s.name,
-        rateOverride: prevMap.get(s.id)?.rateOverride ?? s.rateOverride,
-      }));
-    });
-  }, [route.params?.selectedCasuals]);
+  // Read pending casual selection written by SelectCasualsScreen on every focus.
+  useFocusEffect(useCallback(() => {
+    if (workSessionDraft.pendingCasuals !== null) {
+      const incoming = workSessionDraft.pendingCasuals;
+      workSessionDraft.pendingCasuals = null;
+      setCasuals(prev => {
+        const prevMap = new Map(prev.map(c => [c.id, c]));
+        return incoming.map(s => ({
+          id: s.id, name: s.name,
+          rateOverride: prevMap.get(s.id)?.rateOverride ?? s.rateOverride,
+        }));
+      });
+    }
+  }, []));
+
+  function handleClearAll() {
+    Alert.alert('Clear Form', 'Clear all entered data?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Clear', style: 'destructive',
+        onPress: () => {
+          setSessionDate(formatDate(new Date()));
+          setActivity('');
+          setDefaultRate('');
+          setCasuals([]);
+        },
+      },
+    ]);
+  }
 
   function updateRate(labourerId: number, val: string) {
     const parsed = parseFloat(val);
@@ -271,20 +285,32 @@ export default function CreateWorkSessionScreen() {
           returnKeyType="done"
         />
 
-        {/* Casuals */}
+        {/* Casuals header */}
         <View style={styles.casualsHeader}>
           <Text style={styles.label}>Casuals ({casuals.length})</Text>
-          <TouchableOpacity
-            style={styles.chooseBtn}
-            onPress={() => navigation.navigate('SelectCasuals', {
-              currentSelection: casuals.map(c => ({ id: c.id, rateOverride: c.rateOverride })),
-              defaultRate: defaultRateNum,
-            })}
-            activeOpacity={0.8}
-          >
-            <Feather name="plus" size={14} color="#7c3aed" />
-            <Text style={styles.chooseBtnText}>Choose Casuals +</Text>
-          </TouchableOpacity>
+          <View style={styles.casualsActions}>
+            {!isEditing && (casuals.length > 0 || activity || defaultRate) && (
+              <TouchableOpacity
+                style={styles.clearBtn}
+                onPress={handleClearAll}
+                activeOpacity={0.8}
+              >
+                <Feather name="x-circle" size={13} color="#e53e3e" />
+                <Text style={styles.clearBtnText}>Clear All</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={styles.chooseBtn}
+              onPress={() => navigation.navigate('SelectCasuals', {
+                currentSelection: casuals.map(c => ({ id: c.id, rateOverride: c.rateOverride })),
+                defaultRate: defaultRateNum,
+              })}
+              activeOpacity={0.8}
+            >
+              <Feather name="plus" size={14} color="#7c3aed" />
+              <Text style={styles.chooseBtnText}>Choose Casuals</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {casuals.length === 0 && (
@@ -318,11 +344,10 @@ export default function CreateWorkSessionScreen() {
           );
         })}
 
-        {/* Extra space so footer doesn't overlap last input */}
         <View style={{ height: 100 }} />
       </ScrollView>
 
-      {/* Save button — floats over scroll content */}
+      {/* Save button */}
       <View style={styles.footer}>
         <TouchableOpacity
           style={[styles.saveBtn, saving && styles.saveBtnDisabled]}
@@ -370,6 +395,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     marginTop: 22, marginBottom: 10,
   },
+  casualsActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  clearBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 10, paddingVertical: 7,
+    backgroundColor: '#fff1f1', borderRadius: 20,
+    borderWidth: 1, borderColor: '#fecaca',
+  },
+  clearBtnText: { fontSize: 12, fontWeight: '700', color: '#e53e3e' },
   chooseBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
     paddingHorizontal: 14, paddingVertical: 8,

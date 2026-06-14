@@ -87,6 +87,20 @@ export async function addCasualLabourer(
   return res.data.data as CasualLabourerDto;
 }
 
+export async function updateCasualLabourer(
+  farmId: number,
+  labourerId: number,
+  params: AddCasualLabourerParams,
+): Promise<CasualLabourerDto> {
+  const res = await apiClient.put(`/farms/${farmId}/casual-labourers/${labourerId}`, {
+    name: params.name,
+    phone: params.phone || null,
+    photoBase64: params.photoBase64 || null,
+    photoMimeType: params.photoMimeType || null,
+  });
+  return res.data.data as CasualLabourerDto;
+}
+
 export async function deactivateCasualLabourer(farmId: number, labourerId: number): Promise<void> {
   await apiClient.delete(`/farms/${farmId}/casual-labourers/${labourerId}`);
 }
