@@ -15,6 +15,7 @@ import CasualReportScreen from '../screens/CasualReportScreen';
 import ExpensesScreen from '../screens/expenses/ExpensesScreen';
 import LivestockScreen from '../screens/livestock/LivestockScreen';
 import MilkScreen from '../screens/milk/MilkScreen';
+import PayrollScreen from '../screens/PayrollScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import WorkersScreen from '../screens/WorkersScreen';
 import { useAuth } from '../store/AuthContext';
@@ -25,6 +26,7 @@ import {
   LivestockStackParamList,
   MainTabParamList,
   MilkStackParamList,
+  PayrollStackParamList,
 } from '../types';
 import { navigationRef } from './navigationRef';
 
@@ -73,6 +75,7 @@ const AttendanceStack = createNativeStackNavigator<AttendanceStackParamList>();
 const LivestockStack  = createNativeStackNavigator<LivestockStackParamList>();
 const MilkStack       = createNativeStackNavigator<MilkStackParamList>();
 const ExpensesStack   = createNativeStackNavigator<ExpensesStackParamList>();
+const PayrollStack    = createNativeStackNavigator<PayrollStackParamList>();
 
 function AttendanceNavigator() {
   return (
@@ -136,6 +139,14 @@ function ExpensesNavigator() {
   );
 }
 
+function PayrollNavigator() {
+  return (
+    <PayrollStack.Navigator screenOptions={{ headerShown: false }}>
+      <PayrollStack.Screen name="PayrollHome" component={PayrollScreen} />
+    </PayrollStack.Navigator>
+  );
+}
+
 export default function MainNavigator() {
   const { user } = useAuth();
   const isAdmin      = user?.role === 'ADMIN';
@@ -173,6 +184,7 @@ export default function MainNavigator() {
             Livestock:  'tag',
             Milk:       'droplet',
             Expenses:   'dollar-sign',
+            Payroll:    'credit-card',
             Admin:      isOpsManager ? 'dollar-sign' : isManager ? 'clipboard' : 'grid',
             Settings:   'settings',
           };
@@ -184,6 +196,7 @@ export default function MainNavigator() {
       {showFarmTabs && <Tab.Screen name="Livestock"  component={LivestockNavigator} />}
       {showFarmTabs && <Tab.Screen name="Milk"       component={MilkNavigator} />}
       {showFarmTabs && <Tab.Screen name="Expenses"   component={ExpensesNavigator} />}
+      {(isManager || isAdmin) && <Tab.Screen name="Payroll" component={PayrollNavigator} />}
       {(isAdmin || isManager || isOpsManager) && (
         <Tab.Screen
           name="Admin"

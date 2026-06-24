@@ -120,9 +120,39 @@ export type MainTabParamList = {
   Livestock: undefined;
   Milk: undefined;
   Expenses: undefined;
+  Payroll: undefined;
   Admin: { screen?: string; params?: object };
   Settings: undefined;
 };
+
+export type PayrollStackParamList = {
+  PayrollHome: undefined;
+};
+
+export interface PayrollRecord {
+  id: number;
+  employeeId: number;
+  employeeName: string;
+  employeeCode: string | null;
+  salaryRate: number | null;
+  daysWorked: number | null;
+  grossSalary: number | null;
+  loans: number;
+  amountPaid: number;
+  amountRemaining: number | null;
+  notes: string | null;
+}
+
+export interface PayrollEntryRequest {
+  employeeId: number;
+  salaryRate: number | null;
+  daysWorked: number | null;
+  grossSalary: number | null;
+  loans: number;
+  amountPaid: number;
+  amountRemaining: number | null;
+  notes: string | null;
+}
 
 export interface FarmLiveStatus {
   farmId: number;
@@ -141,6 +171,9 @@ export interface FarmLiveStatus {
 
 export interface CasualLabourerDto {
   id: number;
+  employeeId?: string;
+  firstName?: string;
+  lastName?: string;
   name: string;
   phone: string | null;
   photoBase64: string | null;
@@ -221,6 +254,7 @@ export interface CasualLabourerSummaryDto {
 
 export interface CasualPayrollEntry {
   labourerId: number;
+  employeeId?: string;
   name: string;
   phone: string | null;
   photoBase64: string | null;
