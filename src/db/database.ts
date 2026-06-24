@@ -171,8 +171,45 @@ export async function initDatabase(): Promise<void> {
     'ALTER TABLE local_expenses ADD COLUMN receipt_image_uri TEXT',
     'ALTER TABLE local_attendance ADD COLUMN status TEXT',
     'ALTER TABLE local_casual_attendance ADD COLUMN task_description TEXT',
+    'ALTER TABLE workers_cache ADD COLUMN employee_id TEXT',
+    'ALTER TABLE workers_cache ADD COLUMN first_name TEXT',
+    'ALTER TABLE workers_cache ADD COLUMN last_name TEXT',
+    'ALTER TABLE casual_labourers_cache ADD COLUMN employee_id TEXT',
+    'ALTER TABLE casual_labourers_cache ADD COLUMN first_name TEXT',
+    'ALTER TABLE casual_labourers_cache ADD COLUMN last_name TEXT',
+    'CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)',
   ];
   for (const sql of migrations) {
     try { await db.execAsync(`${sql};`); } catch {}
   }
+
+}
+
+/**
+ * After the V29 backend migration, worker IDs in local_attendance are the old
+ * workers.id values, but the API now returns employees.id (new sequential IDs).
+ * Remap using worker_name as the bridge so display and sync both work correctly.
+ */
+export async function remapAttendanceWorkerIds(
+  workers: Array<{ id: number; name: string }>,
+): Promise<void> {
+  if (workers.length === 0) return;
+  const db = getDb();
+  const nameToId = new Map(workers.map(w => [w.name.toLowerCase().trim(), w.id]));
+  const currentIds = new Set(workers.map(w => w.id));
+
+  const rows = await db.getAllAsync<{ worker_id: number; worker_name: string }>(
+    'SELECT DISTINCT worker_id, worker_name FROM local_attendance',
+  );
+  const needRemap = rows.filter(r => !currentIds.has(r.worker_id));
+  if (needRemap.length === 0) return;
+
+  await db.withTransactionAsync(async () => {
+    for (const row of needRemap) {
+      const newId = nameToId.get(row.worker_name.toLowerCase().trim());
+      if (newId == null) continue;
+      await db.runAsync('UPDATE local_attendance SET worker_id = ? WHERE worker_id = ?', [newId, row.worker_id]);
+      await db.runAsync('UPDATE local_attendance_notes SET worker_id = ? WHERE worker_id = ?', [newId, row.worker_id]);
+    }
+  });
 }

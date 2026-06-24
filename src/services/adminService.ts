@@ -112,6 +112,23 @@ export const adminService = {
     });
   },
 
+  async downloadBackup(): Promise<void> {
+    const token = await AsyncStorage.getItem('auth_token');
+    const response = await fetch(`${BASE_URL}/admin/backup`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'ngrok-skip-browser-warning': 'true' },
+    });
+    if (!response.ok) throw new Error('Backup failed');
+    const today = new Date().toISOString().slice(0, 10);
+    const fileUri = (FileSystem.cacheDirectory ?? '') + `attendance-backup-${today}.csv`;
+    await FileSystem.writeAsStringAsync(fileUri, uint8ToBase64(new Uint8Array(await response.arrayBuffer())), { encoding: 'base64' });
+    await Sharing.shareAsync(fileUri, {
+      mimeType: 'text/csv',
+      dialogTitle: 'Save Attendance Backup',
+      UTI: 'public.comma-separated-values-text',
+    });
+  },
+
   async downloadFarmExcel(reportId: number, farmName: string, year: number, month: number): Promise<void> {
     const token = await AsyncStorage.getItem('auth_token');
     const safeName = farmName.replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');

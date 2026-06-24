@@ -16,7 +16,9 @@ import apiClient from './apiClient';
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8080/api';
 
 interface AddCasualLabourerParams {
-  name: string;
+  name?: string;
+  firstName?: string;
+  lastName?: string;
   phone: string | null;
   photoBase64: string | null;
   photoMimeType: string | null;
@@ -29,21 +31,38 @@ interface RecordPaymentParams {
 }
 
 async function getCachedCasualLabourers(farmId: number): Promise<CasualLabourerDto[] | null> {
-  const rows = await getDb().getAllAsync<{
-    id: number; name: string; phone: string | null;
-    photo_base64: string | null; photo_mime_type: string | null;
-  }>(
-    'SELECT id, name, phone, photo_base64, photo_mime_type FROM casual_labourers_cache WHERE farm_id = ? ORDER BY name',
-    [farmId],
-  );
-  if (rows.length === 0) return null;
-  return rows.map(r => ({
-    id: r.id,
-    name: r.name,
-    phone: r.phone,
-    photoBase64: r.photo_base64,
-    photoMimeType: r.photo_mime_type,
-  }));
+  try {
+    const rows = await getDb().getAllAsync<{
+      id: number; name: string; phone: string | null;
+      photo_base64: string | null; photo_mime_type: string | null;
+      employee_id: string | null; first_name: string | null; last_name: string | null;
+    }>(
+      'SELECT id, name, phone, photo_base64, photo_mime_type, employee_id, first_name, last_name FROM casual_labourers_cache WHERE farm_id = ? ORDER BY name',
+      [farmId],
+    );
+    if (rows.length === 0) return null;
+    return rows.map(r => ({
+      id: r.id,
+      name: r.name,
+      phone: r.phone,
+      photoBase64: r.photo_base64,
+      photoMimeType: r.photo_mime_type,
+      employeeId: r.employee_id ?? undefined,
+      firstName: r.first_name ?? undefined,
+      lastName: r.last_name ?? undefined,
+    }));
+  } catch {
+    // New columns may not exist yet if migrations haven't run — fall back to base columns
+    const rows = await getDb().getAllAsync<{
+      id: number; name: string; phone: string | null;
+      photo_base64: string | null; photo_mime_type: string | null;
+    }>(
+      'SELECT id, name, phone, photo_base64, photo_mime_type FROM casual_labourers_cache WHERE farm_id = ? ORDER BY name',
+      [farmId],
+    );
+    if (rows.length === 0) return null;
+    return rows.map(r => ({ id: r.id, name: r.name, phone: r.phone, photoBase64: r.photo_base64, photoMimeType: r.photo_mime_type }));
+  }
 }
 
 async function setCachedCasualLabourers(farmId: number, labourers: CasualLabourerDto[]): Promise<void> {
@@ -52,9 +71,9 @@ async function setCachedCasualLabourers(farmId: number, labourers: CasualLaboure
     await db.runAsync('DELETE FROM casual_labourers_cache WHERE farm_id = ?', [farmId]);
     for (const l of labourers) {
       await db.runAsync(
-        `INSERT INTO casual_labourers_cache (id, farm_id, name, phone, default_daily_rate, photo_base64, photo_mime_type)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [l.id, farmId, l.name, l.phone ?? null, 0, l.photoBase64 ?? null, l.photoMimeType ?? null],
+        `INSERT INTO casual_labourers_cache (id, farm_id, name, phone, default_daily_rate, photo_base64, photo_mime_type, employee_id, first_name, last_name)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [l.id, farmId, l.name, l.phone ?? null, 0, l.photoBase64 ?? null, l.photoMimeType ?? null, l.employeeId ?? null, l.firstName ?? null, l.lastName ?? null],
       );
     }
   });
@@ -66,7 +85,7 @@ export async function getCasualLabourers(farmId: number): Promise<CasualLabourer
   try {
     const res = await apiClient.get(`/farms/${farmId}/casual-labourers`);
     const labourers: CasualLabourerDto[] = res.data.data;
-    await setCachedCasualLabourers(farmId, labourers);
+    setCachedCasualLabourers(farmId, labourers).catch(() => {}); // non-fatal: cache failure must not discard fresh data
     return labourers;
   } catch {
     const cached = await getCachedCasualLabourers(farmId);
@@ -79,7 +98,9 @@ export async function addCasualLabourer(
   params: AddCasualLabourerParams,
 ): Promise<CasualLabourerDto> {
   const res = await apiClient.post(`/farms/${farmId}/casual-labourers`, {
-    name: params.name,
+    name: params.name || null,
+    firstName: params.firstName || null,
+    lastName: params.lastName || null,
     phone: params.phone || null,
     photoBase64: params.photoBase64 || null,
     photoMimeType: params.photoMimeType || null,
@@ -93,7 +114,9 @@ export async function updateCasualLabourer(
   params: AddCasualLabourerParams,
 ): Promise<CasualLabourerDto> {
   const res = await apiClient.put(`/farms/${farmId}/casual-labourers/${labourerId}`, {
-    name: params.name,
+    name: params.name || null,
+    firstName: params.firstName || null,
+    lastName: params.lastName || null,
     phone: params.phone || null,
     photoBase64: params.photoBase64 || null,
     photoMimeType: params.photoMimeType || null,

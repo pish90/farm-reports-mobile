@@ -295,6 +295,7 @@ export default function AttendanceScreen() {
   const [isSubmitted,   setIsSubmitted]   = useState(false);
   const [loadError,     setLoadError]     = useState<string | null>(null);
   const [saveState,     setSaveState]     = useState<SaveState>('idle');
+  const [debugInfo,     setDebugInfo]     = useState<string>('');
 
   const [showDayPicker,     setShowDayPicker]     = useState(false);
   const [showDayAttendance, setShowDayAttendance] = useState(false);
@@ -328,15 +329,38 @@ export default function AttendanceScreen() {
         `SELECT COUNT(*) AS count FROM sync_queue WHERE report_id = ? AND section = 'attendance' AND synced = 0`,
         [report.id],
       );
+      const hasPendingSync = (pendingRow?.count ?? 0) > 0;
+
+      // Detect whether local_attendance has any rows that match current employee IDs.
+      // If not (empty or all rows have stale IDs from the V29 migration), bypass the
+      // pending-sync gate and pull authoritative data from the server instead.
+      const currentWorkerIds = workers.map(w => w.id);
+      let hasMatchingLocalAtt = false;
+      if (currentWorkerIds.length > 0) {
+        const ph = currentWorkerIds.map(() => '?').join(',');
+        const matchRow = await getDb().getFirstAsync<{ count: number }>(
+          `SELECT COUNT(*) AS count FROM local_attendance WHERE report_id = ? AND worker_id IN (${ph})`,
+          [report.id, ...currentWorkerIds],
+        );
+        hasMatchingLocalAtt = (matchRow?.count ?? 0) > 0;
+      }
+
       let serverAttendanceCount = -1;
-      if ((pendingRow?.count ?? 0) === 0) {
+      let debugFetch = `farm=${user!.farmId} pend=${hasPendingSync} match=${hasMatchingLocalAtt}`;
+      // Only pull from server when local has no matching attendance rows.
+      // If local already has data (hasMatchingLocalAtt=true) it is the source of
+      // truth for a DRAFT report and must not be overwritten by potentially stale
+      // or blank server data.
+      if (!hasMatchingLocalAtt) {
         try {
           const res = await apiClient.get('/reports', {
             params: { farmId: user!.farmId!, year, month },
           });
           const serverReport = res.data?.data;
+          debugFetch += ` srv=${serverReport?.id ?? 'null'}`;
           if (serverReport?.id) {
             serverAttendanceCount = serverReport.attendance?.length ?? 0;
+            debugFetch += ` attCnt=${serverAttendanceCount}`;
             if (!report.server_report_id) await updateServerReportId(report.id, serverReport.id);
 
             if (serverAttendanceCount > 0) {
@@ -347,13 +371,23 @@ export default function AttendanceScreen() {
                 day_of_month: a.dayOfMonth, present: a.status === 'P' ? 1 : 0,
                 status: a.status, notes: a.notes ?? null,
               })));
+              // If this was previously gated by a pending-sync entry, retire it
+              // now that we have confirmed authoritative data from the server.
+              if (hasPendingSync) {
+                await getDb().runAsync(
+                  "UPDATE sync_queue SET synced = 1 WHERE report_id = ? AND section = 'attendance' AND synced = 0",
+                  [report.id],
+                );
+              }
             }
 
             if (serverReport.status === 'SUBMITTED') await updateReportSubmitted(report.id, 'server');
           }
-        } catch {
-          // Offline — use local DB
+        } catch (err: any) {
+          debugFetch += ` ERR:${err?.message ?? err?.response?.status ?? 'unknown'}`;
         }
+      } else {
+        debugFetch += ' LOCAL';
       }
 
       const refreshed = (await getLocalReport(report.id)) ?? report;
@@ -367,11 +401,18 @@ export default function AttendanceScreen() {
         await markSectionDirty(report.id, 'attendance');
       }
 
+      const localWids = [...new Set(rows.map(r => r.worker_id))];
+      const apiWids   = workers.map(w => w.id);
+      const matching  = localWids.filter(id => apiWids.includes(id));
+
       const newGrid: AttendanceGrid = {};
       for (const r of rows) {
         newGrid[gridKey(r.worker_id, r.day_of_month)] = (r.status as AttendanceStatus | null) ?? (r.present === 1 ? 'P' : 'A');
       }
       setGrid(newGrid);
+      setDebugInfo(
+        `${debugFetch} | localRows=${rows.length} localWids=[${localWids.join(',')}] apiWids=[${apiWids.join(',')}] matchWids=${matching.length}`,
+      );
 
       const noteRows = await getDb().getAllAsync<{ worker_id: number; note: string }>(
         'SELECT worker_id, note FROM local_attendance_notes WHERE report_id = ?', [report.id],
@@ -401,6 +442,22 @@ export default function AttendanceScreen() {
         for (let day = 1; day <= days; day++) {
           const status = currentGrid[gridKey(worker.id, day)] ?? 'A';
           records.push({ worker_id: worker.id, worker_name: worker.name, day_of_month: day, status, present: status === 'P' ? 1 : 0, notes: null });
+        }
+      }
+      // Guard: if every record is 'A' and there are workers, this is almost certainly
+      // a blank-grid auto-save caused by a worker-ID mismatch. Refuse to save — it
+      // would silently wipe real data that already exists for this report.
+      const allAbsent = records.every(r => r.status === 'A');
+      if (allAbsent && currentWorkers.length > 0) {
+        const existing = await import('../db/database').then(m =>
+          m.getDb().getFirstAsync<{ count: number }>(
+            'SELECT COUNT(*) AS count FROM local_attendance WHERE report_id = ? AND status != ?',
+            [reportId, 'A'],
+          ),
+        );
+        if ((existing?.count ?? 0) > 0) {
+          setSaveState('idle');
+          return;
         }
       }
       await saveAttendance(reportId, records);
@@ -520,6 +577,12 @@ export default function AttendanceScreen() {
               onNoteChange={handleNoteChange}
             />
           ))}
+
+          {!!debugInfo && (
+            <Text style={{ fontSize: 10, color: '#888', margin: 8, fontFamily: 'monospace' }}>
+              {debugInfo}
+            </Text>
+          )}
 
           <View style={{ height: 40 }} />
         </ScrollView>

@@ -70,7 +70,10 @@ export default function SelectCasualsScreen() {
     }, [user?.farmId]),
   );
 
-  const filtered = labourers.filter(l => l.name.toLowerCase().includes(search.toLowerCase()));
+  const filtered = labourers.filter(l =>
+    l.name.toLowerCase().includes(search.toLowerCase()) ||
+    (l.employeeId && l.employeeId.toLowerCase().includes(search.toLowerCase()))
+  );
 
   function toggle(id: number) {
     setChecked(prev => {
@@ -264,6 +267,7 @@ export default function SelectCasualsScreen() {
                   <Avatar labourer={item} />
                   <View style={{ flex: 1, marginLeft: 12 }}>
                     <Text style={styles.rowName}>{item.name}</Text>
+                    {item.employeeId ? <Text style={styles.rowEmpId}>{item.employeeId}</Text> : null}
                     {item.phone && <Text style={styles.rowPhone}>{item.phone}</Text>}
                   </View>
                 </View>
@@ -420,6 +424,7 @@ const styles = StyleSheet.create({
   },
   avatarInitial: { fontSize: 16, fontWeight: '700', color: '#2d6a4f' },
   rowName:  { fontSize: 15, fontWeight: '600', color: '#1a1a1a' },
+  rowEmpId: { fontSize: 11, color: '#7c3aed', fontWeight: '600', marginTop: 1 },
   rowPhone: { fontSize: 12, color: '#888', marginTop: 2 },
   optionsBtn: { padding: 6, marginRight: 4 },
   checkbox: {

@@ -67,7 +67,10 @@ function WorkerRow({ worker, onDelete }: { worker: WorkerDto; onDelete: (w: Work
       <View style={[rowStyles.avatar, { backgroundColor: '#e8f5ef' }]}>
         <Feather name="user" size={16} color="#2d6a4f" />
       </View>
-      <Text style={rowStyles.name}>{worker.name}</Text>
+      <View style={{ flex: 1 }}>
+        <Text style={rowStyles.name}>{worker.name}</Text>
+        {worker.employeeId ? <Text style={rowStyles.empId}>{worker.employeeId}</Text> : null}
+      </View>
       <TouchableOpacity style={rowStyles.deleteBtn} onPress={() => onDelete(worker)} hitSlop={8}>
         <Feather name="trash-2" size={18} color="#e53e3e" />
       </TouchableOpacity>
@@ -92,6 +95,7 @@ function CasualRow({
       </View>
       <View style={{ flex: 1 }}>
         <Text style={rowStyles.name}>{labourer.name}</Text>
+        {labourer.employeeId ? <Text style={rowStyles.empId}>{labourer.employeeId}</Text> : null}
         {labourer.phone ? <Text style={rowStyles.sub}>{labourer.phone}</Text> : null}
       </View>
       <TouchableOpacity style={rowStyles.deleteBtn} onPress={() => onDelete(labourer)} hitSlop={8}>
@@ -106,6 +110,7 @@ const rowStyles = StyleSheet.create({
   avatar:  { width: 36, height: 36, borderRadius: 18, backgroundColor: '#f3e8ff', alignItems: 'center', justifyContent: 'center', marginRight: 12, overflow: 'hidden' },
   photo:   { width: 36, height: 36, borderRadius: 18 },
   name:    { fontSize: 15, color: '#1a1a1a', fontWeight: '500' },
+  empId:   { fontSize: 11, color: '#7c3aed', fontWeight: '600', marginTop: 1 },
   sub:     { fontSize: 12, color: '#888', marginTop: 1 },
   rate:    { fontSize: 13, color: '#2d6a4f', fontWeight: '600', marginRight: 12 },
   deleteBtn: { padding: 6 },
@@ -113,28 +118,32 @@ const rowStyles = StyleSheet.create({
 
 // ─── Add Worker modal ─────────────────────────────────────────────────────────
 
-function AddWorkerModal({ visible, onAdd, onCancel }: { visible: boolean; onAdd: (name: string) => Promise<void>; onCancel: () => void }) {
-  const [name, setName] = useState('');
-  const [saving, setSaving] = useState(false);
+function AddWorkerModal({ visible, onAdd, onCancel }: { visible: boolean; onAdd: (firstName: string, lastName: string) => Promise<void>; onCancel: () => void }) {
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName]   = useState('');
+  const [saving, setSaving]       = useState(false);
+
+  function reset() { setFirstName(''); setLastName(''); }
 
   async function handleAdd() {
-    const trimmed = name.trim();
-    if (!trimmed) return;
+    const trimmedFirst = firstName.trim();
+    if (!trimmedFirst) return;
     setSaving(true);
-    try { await onAdd(trimmed); setName(''); } finally { setSaving(false); }
+    try { await onAdd(trimmedFirst, lastName.trim()); reset(); } finally { setSaving(false); }
   }
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={() => { setName(''); onCancel(); }}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={() => { reset(); onCancel(); }}>
       <View style={modalStyles.overlay}>
         <View style={[modalStyles.sheet]} elevation={10}>
           <Text style={modalStyles.title}>Add Worker</Text>
-          <TextInput style={modalStyles.input} placeholder="Full name" placeholderTextColor="#bbb" value={name} onChangeText={setName} autoFocus maxLength={100} returnKeyType="done" onSubmitEditing={handleAdd} />
+          <TextInput style={modalStyles.input} placeholder="First name" placeholderTextColor="#bbb" value={firstName} onChangeText={setFirstName} autoFocus maxLength={100} returnKeyType="next" />
+          <TextInput style={[modalStyles.input, { marginTop: 10 }]} placeholder="Last name (optional)" placeholderTextColor="#bbb" value={lastName} onChangeText={setLastName} maxLength={100} returnKeyType="done" onSubmitEditing={handleAdd} />
           <View style={modalStyles.actions}>
-            <TouchableOpacity style={modalStyles.cancelBtn} onPress={() => { setName(''); onCancel(); }}>
+            <TouchableOpacity style={modalStyles.cancelBtn} onPress={() => { reset(); onCancel(); }}>
               <Text style={modalStyles.cancelText}>Cancel</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[modalStyles.addBtn, (!name.trim() || saving) && modalStyles.addBtnDisabled]} onPress={handleAdd} disabled={!name.trim() || saving}>
+            <TouchableOpacity style={[modalStyles.addBtn, (!firstName.trim() || saving) && modalStyles.addBtnDisabled]} onPress={handleAdd} disabled={!firstName.trim() || saving}>
               {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={modalStyles.addText}>Add</Text>}
             </TouchableOpacity>
           </View>
@@ -148,17 +157,18 @@ function AddWorkerModal({ visible, onAdd, onCancel }: { visible: boolean; onAdd:
 
 function AddCasualLabourerModal({ visible, onAdd, onCancel }: {
   visible: boolean;
-  onAdd: (p: { name: string; phone: string | null; photoBase64: string | null; photoMimeType: string | null }) => Promise<void>;
+  onAdd: (p: { firstName: string; lastName: string; phone: string | null; photoBase64: string | null; photoMimeType: string | null }) => Promise<void>;
   onCancel: () => void;
 }) {
-  const [name, setName]   = useState('');
-  const [phone, setPhone] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName]   = useState('');
+  const [phone, setPhone]         = useState('');
   const [photoUri, setPhotoUri]         = useState<string | null>(null);
   const [photoBase64, setPhotoBase64]   = useState<string | null>(null);
   const [photoMimeType, setPhotoMimeType] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  function reset() { setName(''); setPhone(''); setPhotoUri(null); setPhotoBase64(null); setPhotoMimeType(null); }
+  function reset() { setFirstName(''); setLastName(''); setPhone(''); setPhotoUri(null); setPhotoBase64(null); setPhotoMimeType(null); }
 
   async function pickPhoto(source: 'camera' | 'library') {
     let result: ImagePicker.ImagePickerResult;
@@ -187,14 +197,14 @@ function AddCasualLabourerModal({ visible, onAdd, onCancel }: {
   }
 
   async function handleSave() {
-    const trimmedName = name.trim();
-    if (!trimmedName) return;
+    const trimmedFirst = firstName.trim();
+    if (!trimmedFirst) return;
     setSaving(true);
-    try { await onAdd({ name: trimmedName, phone: phone.trim() || null, photoBase64, photoMimeType }); reset(); }
+    try { await onAdd({ firstName: trimmedFirst, lastName: lastName.trim(), phone: phone.trim() || null, photoBase64, photoMimeType }); reset(); }
     finally { setSaving(false); }
   }
 
-  const canSave = name.trim().length > 0 && !saving;
+  const canSave = firstName.trim().length > 0 && !saving;
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={() => { reset(); onCancel(); }}>
@@ -213,8 +223,10 @@ function AddCasualLabourerModal({ visible, onAdd, onCancel }: {
                   <Text style={casualModalStyles.photoBtnText}>{photoUri ? 'Change photo' : 'Take photo'}</Text>
                 </TouchableOpacity>
               </View>
-              <Text style={casualModalStyles.label}>Name</Text>
-              <TextInput style={casualModalStyles.input} placeholder="Samuel Kamau" placeholderTextColor="#bbb" value={name} onChangeText={setName} maxLength={100} autoFocus />
+              <Text style={casualModalStyles.label}>First name</Text>
+              <TextInput style={casualModalStyles.input} placeholder="Samuel" placeholderTextColor="#bbb" value={firstName} onChangeText={setFirstName} maxLength={100} autoFocus />
+              <Text style={casualModalStyles.label}>Last name (optional)</Text>
+              <TextInput style={casualModalStyles.input} placeholder="Kamau" placeholderTextColor="#bbb" value={lastName} onChangeText={setLastName} maxLength={100} />
               <Text style={casualModalStyles.label}>Phone (optional)</Text>
               <TextInput style={casualModalStyles.input} placeholderTextColor="#bbb" value={phone} onChangeText={setPhone} keyboardType="phone-pad" maxLength={20} />
               <View style={casualModalStyles.actions}>
@@ -756,9 +768,9 @@ export default function WorkersScreen() {
 
   useEffect(() => { load(); }, [load]);
 
-  const handleAddWorker = useCallback(async (name: string) => {
+  const handleAddWorker = useCallback(async (firstName: string, lastName: string) => {
     if (!farmId) return;
-    await addWorker(farmId, name);
+    await addWorker(farmId, firstName, lastName);
     setShowAddWorker(false);
     await load();
   }, [farmId, load]);
@@ -773,9 +785,9 @@ export default function WorkersScreen() {
     ]);
   }, [farmId, load]);
 
-  const handleAddCasual = useCallback(async (p: { name: string; phone: string | null; photoBase64: string | null; photoMimeType: string | null }) => {
+  const handleAddCasual = useCallback(async (p: { firstName: string; lastName: string; phone: string | null; photoBase64: string | null; photoMimeType: string | null }) => {
     if (!farmId) return;
-    await addCasualLabourer(farmId, p);
+    await addCasualLabourer(farmId, { firstName: p.firstName, lastName: p.lastName || undefined, phone: p.phone, photoBase64: p.photoBase64, photoMimeType: p.photoMimeType });
     setShowAddCasual(false);
     await load();
   }, [farmId, load]);
