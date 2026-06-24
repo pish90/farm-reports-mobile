@@ -15,9 +15,10 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import MonthYearSelector from '../components/shared/MonthYearSelector';
+import { adminService } from '../services/adminService';
 import { getPayroll, savePayroll } from '../services/payrollService';
 import { useAuth } from '../store/AuthContext';
-import { PayrollEntryRequest, PayrollRecord } from '../types';
+import { FarmLiveStatus, PayrollEntryRequest, PayrollRecord } from '../types';
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
@@ -34,9 +35,13 @@ export default function PayrollScreen() {
   const { user } = useAuth();
   const now = new Date();
   const isWorker = user?.role === 'WORKER';
+  const isAdmin  = user?.role === 'ADMIN';
 
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
+
+  const [farms, setFarms] = useState<FarmLiveStatus[]>([]);
+  const [selectedFarmId, setSelectedFarmId] = useState<number | null>(user?.farmId ?? null);
 
   const [entries, setEntries] = useState<PayrollRecord[]>([]);
   const [loading, setLoading] = useState(false);
@@ -48,19 +53,31 @@ export default function PayrollScreen() {
 
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  useEffect(() => {
+    if (!isAdmin) return;
+    adminService.getFarmLiveStatus(year, month).then(list => {
+      setFarms(list);
+      if (list.length > 0 && selectedFarmId === null) {
+        setSelectedFarmId(list[0].farmId);
+      }
+    }).catch(() => {});
+  }, [isAdmin, year, month]);
+
+  const activeFarmId = selectedFarmId ?? user?.farmId ?? null;
+
   const load = useCallback(async () => {
-    if (!user?.farmId) return;
+    if (!activeFarmId) return;
     setLoading(true);
     setError(null);
     try {
-      const data = await getPayroll(user.farmId, year, month);
+      const data = await getPayroll(activeFarmId, year, month);
       setEntries(data);
     } catch (e: any) {
       setError(e?.response?.data?.message ?? e?.message ?? 'Failed to load payroll');
     } finally {
       setLoading(false);
     }
-  }, [user?.farmId, year, month]);
+  }, [activeFarmId, year, month]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
   useEffect(() => { load(); }, [load]);
@@ -85,7 +102,7 @@ export default function PayrollScreen() {
   }
 
   async function handleSaveAll() {
-    if (!user?.farmId) return;
+    if (!activeFarmId) return;
     setSaveState('saving');
     const payload: PayrollEntryRequest[] = entries.map(r => ({
       employeeId: r.employeeId,
@@ -98,7 +115,7 @@ export default function PayrollScreen() {
       notes: r.notes,
     }));
     try {
-      await savePayroll(user.farmId, year, month, payload);
+      await savePayroll(activeFarmId, year, month, payload);
       setSaveState('saved');
       if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
       savedTimerRef.current = setTimeout(() => setSaveState('idle'), 2000);
@@ -121,6 +138,21 @@ export default function PayrollScreen() {
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <MonthYearSelector year={year} month={month} onChange={(y, m) => { setYear(y); setMonth(m); }} />
+      {isAdmin && farms.length > 0 && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.farmBar} contentContainerStyle={styles.farmBarContent}>
+          {farms.map(f => (
+            <TouchableOpacity
+              key={f.farmId}
+              style={[styles.farmChip, f.farmId === selectedFarmId && styles.farmChipActive]}
+              onPress={() => setSelectedFarmId(f.farmId)}
+            >
+              <Text style={[styles.farmChipText, f.farmId === selectedFarmId && styles.farmChipTextActive]}>
+                {f.farmName}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
 
       <View style={styles.toolbar}>
         <View style={{ flex: 1 }} />
@@ -343,6 +375,13 @@ export default function PayrollScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f7f9' },
   scroll: { padding: 12 },
+
+  farmBar: { maxHeight: 48, backgroundColor: '#fff', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#eee' },
+  farmBarContent: { paddingHorizontal: 12, paddingVertical: 8, gap: 8, flexDirection: 'row' },
+  farmChip: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 16, backgroundColor: '#f0f0f0' },
+  farmChipActive: { backgroundColor: '#2d6a4f' },
+  farmChipText: { fontSize: 13, fontWeight: '600', color: '#555' },
+  farmChipTextActive: { color: '#fff' },
 
   toolbar: {
     flexDirection: 'row', alignItems: 'center',
