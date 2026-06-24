@@ -4,7 +4,6 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -136,7 +135,7 @@ export default function PayrollScreen() {
   }
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+    <View style={styles.container}>
       <MonthYearSelector year={year} month={month} onChange={(y, m) => { setYear(y); setMonth(m); }} />
       {isAdmin && farms.length > 0 && (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.farmBar} contentContainerStyle={styles.farmBarContent}>
@@ -265,8 +264,8 @@ export default function PayrollScreen() {
       )}
 
       <Modal visible={!!editing} transparent animationType="slide" onRequestClose={closeEdit}>
-        <Pressable style={styles.backdrop} onPress={closeEdit} />
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.sheetWrapper}>
+        <KeyboardAvoidingView behavior="padding" style={styles.sheetWrapper}>
+          <Pressable style={styles.backdrop} onPress={closeEdit} />
           <View style={styles.sheet}>
             <View style={styles.handle} />
             <Text style={styles.sheetTitle}>{editDraft.employeeName}</Text>
@@ -368,7 +367,7 @@ export default function PayrollScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -376,11 +375,11 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f7f9' },
   scroll: { padding: 12 },
 
-  farmBar: { maxHeight: 48, backgroundColor: '#fff', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#eee' },
-  farmBarContent: { paddingHorizontal: 12, paddingVertical: 8, gap: 8, flexDirection: 'row' },
-  farmChip: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 16, backgroundColor: '#f0f0f0' },
-  farmChipActive: { backgroundColor: '#2d6a4f' },
-  farmChipText: { fontSize: 13, fontWeight: '600', color: '#555' },
+  farmBar: { height: 52, backgroundColor: '#fff', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#eee' },
+  farmBarContent: { paddingHorizontal: 12, alignItems: 'center', gap: 8, flexDirection: 'row' },
+  farmChip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 16, backgroundColor: '#e8e8e8', borderWidth: 1, borderColor: '#ddd' },
+  farmChipActive: { backgroundColor: '#2d6a4f', borderColor: '#2d6a4f' },
+  farmChipText: { fontSize: 13, fontWeight: '600', color: '#333' },
   farmChipTextActive: { color: '#fff' },
 
   toolbar: {
@@ -424,9 +423,8 @@ const styles = StyleSheet.create({
   backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)' },
   sheetWrapper: { flex: 1, justifyContent: 'flex-end' },
   sheet: {
-    position: 'absolute', bottom: 0, left: 0, right: 0,
     backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20,
-    paddingHorizontal: 16, paddingBottom: 32, maxHeight: '85%',
+    paddingHorizontal: 16, paddingBottom: 32, maxHeight: '90%',
   },
   handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#e0e0e0', alignSelf: 'center', marginTop: 12, marginBottom: 14 },
   sheetTitle: { fontSize: 17, fontWeight: '700', color: '#1a1a1a', textAlign: 'center', marginBottom: 2 },
