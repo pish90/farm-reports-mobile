@@ -134,6 +134,7 @@ export interface PayrollRecord {
   employeeId: number;
   employeeName: string;
   employeeCode: string | null;
+  lsNumber: string | null;
   salaryRate: number | null;
   daysWorked: number | null;
   grossSalary: number | null;
@@ -141,6 +142,60 @@ export interface PayrollRecord {
   amountPaid: number;
   amountRemaining: number | null;
   notes: string | null;
+}
+
+export interface EmployeeDto {
+  id: number;
+  lsNumber: string;
+  employeeId: string;
+  firstName: string;
+  lastName: string | null;
+  fullName: string;
+  phone: string | null;
+  employmentType: 'SALARIED' | 'CASUAL';
+  jobTitle: string | null;
+  departmentName: string | null;
+  startDate: string | null;
+  dateOfBirth: string | null;
+  nationalId: string | null;
+  age: number | null;
+  status: 'ACTIVE' | 'INACTIVE';
+  defaultDailyRate: number | null;
+  photoBase64: string | null;
+  photoMimeType: string | null;
+}
+
+export interface EmployeeRequest {
+  firstName: string;
+  lastName?: string | null;
+  phone?: string | null;
+  employmentType: 'SALARIED' | 'CASUAL';
+  jobTitle?: string | null;
+  startDate?: string | null;
+  dateOfBirth?: string | null;
+  nationalId?: string | null;
+  defaultDailyRate?: number | null;
+  photoBase64?: string | null;
+  photoMimeType?: string | null;
+  status?: string;
+}
+
+export interface EmployeePaymentDto {
+  id: number;
+  employeeId: number;
+  employeeName: string;
+  paymentDate: string;
+  amount: number;
+  note: string | null;
+  paidBy: string | null;
+  createdAt: string;
+}
+
+export interface EmployeeSummaryDto {
+  allTimeEarned: number;
+  allTimePaid: number;
+  outstanding: number;
+  payments: EmployeePaymentDto[];
 }
 
 export interface PayrollEntryRequest {

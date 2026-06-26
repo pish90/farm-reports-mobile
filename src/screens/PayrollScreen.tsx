@@ -2,9 +2,11 @@ import { Feather } from '@expo/vector-icons';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Modal,
-  Pressable,
+  Platform,
+  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -15,9 +17,21 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import MonthYearSelector from '../components/shared/MonthYearSelector';
 import { adminService } from '../services/adminService';
+import {
+  deleteEmployeePayment,
+  getEmployeeSummary,
+  recordEmployeePayment,
+} from '../services/employeeService';
 import { getPayroll, savePayroll } from '../services/payrollService';
 import { useAuth } from '../store/AuthContext';
-import { FarmLiveStatus, PayrollEntryRequest, PayrollRecord } from '../types';
+import {
+  EmployeeSummaryDto,
+  FarmLiveStatus,
+  PayrollEntryRequest,
+  PayrollRecord,
+} from '../types';
+
+const TODAY = new Date().toISOString().slice(0, 10);
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
@@ -50,6 +64,15 @@ export default function PayrollScreen() {
   const [editing, setEditing] = useState<PayrollRecord | null>(null);
   const [editDraft, setEditDraft] = useState<Partial<PayrollRecord>>({});
 
+  // Payment section state
+  const [summary, setSummary] = useState<EmployeeSummaryDto | null>(null);
+  const [loadingSummary, setLoadingSummary] = useState(false);
+  const [showAddPayment, setShowAddPayment] = useState(false);
+  const [payDate, setPayDate]   = useState(TODAY);
+  const [payAmount, setPayAmount] = useState('');
+  const [payNote, setPayNote]   = useState('');
+  const [payLoading, setPayLoading] = useState(false);
+
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -81,15 +104,31 @@ export default function PayrollScreen() {
   useFocusEffect(useCallback(() => { load(); }, [load]));
   useEffect(() => { load(); }, [load]);
 
-  function openEdit(record: PayrollRecord) {
+  async function openEdit(record: PayrollRecord) {
     if (isWorker) return;
     setEditing(record);
     setEditDraft({ ...record });
+    setSummary(null);
+    setShowAddPayment(false);
+    setPayDate(TODAY); setPayAmount(''); setPayNote('');
+    if (activeFarmId) {
+      setLoadingSummary(true);
+      try {
+        const s = await getEmployeeSummary(activeFarmId, record.employeeId);
+        setSummary(s);
+      } catch {
+        // offline — leave null
+      } finally {
+        setLoadingSummary(false);
+      }
+    }
   }
 
   function closeEdit() {
     setEditing(null);
     setEditDraft({});
+    setSummary(null);
+    setShowAddPayment(false);
   }
 
   function commitEdit() {
@@ -118,7 +157,7 @@ export default function PayrollScreen() {
       setSaveState('saved');
       if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
       savedTimerRef.current = setTimeout(() => setSaveState('idle'), 2000);
-    } catch (e: any) {
+    } catch {
       setSaveState('error');
     }
   }
@@ -132,6 +171,47 @@ export default function PayrollScreen() {
     } else {
       setEditDraft(prev => ({ ...prev, [field]: raw === '' ? null : raw }));
     }
+  }
+
+  async function handleAddPayment() {
+    if (!activeFarmId || !editing) return;
+    const amt = parseFloat(payAmount);
+    if (isNaN(amt) || amt <= 0 || !payDate) return;
+    setPayLoading(true);
+    try {
+      await recordEmployeePayment(activeFarmId, editing.employeeId, {
+        paymentDate: payDate,
+        amount: amt,
+        note: payNote.trim() || null,
+      });
+      setPayDate(TODAY); setPayAmount(''); setPayNote('');
+      setShowAddPayment(false);
+      const s = await getEmployeeSummary(activeFarmId, editing.employeeId);
+      setSummary(s);
+    } catch (e: any) {
+      Alert.alert('Error', e.message ?? 'Failed to record payment.');
+    } finally {
+      setPayLoading(false);
+    }
+  }
+
+  async function handleDeletePayment(payId: number, amount: number, date: string) {
+    if (!activeFarmId || !editing) return;
+    Alert.alert('Delete Payment', `Remove payment of Ksh ${amount} on ${date}?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete', style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteEmployeePayment(activeFarmId, editing.employeeId, payId);
+            const s = await getEmployeeSummary(activeFarmId, editing.employeeId);
+            setSummary(s);
+          } catch (e: any) {
+            Alert.alert('Error', e.message ?? 'Failed to delete payment.');
+          }
+        },
+      },
+    ]);
   }
 
   return (
@@ -212,8 +292,11 @@ export default function PayrollScreen() {
                 <View style={styles.cardHeader}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.employeeName}>{record.employeeName}</Text>
-                    {record.employeeCode && (
-                      <Text style={styles.employeeCode}>{record.employeeCode}</Text>
+                    {(record.lsNumber || record.employeeCode) && (
+                      <Text style={styles.employeeCode}>
+                        {record.lsNumber ? record.lsNumber : record.employeeCode}
+                        {record.lsNumber && record.employeeCode ? `  ·  ${record.employeeCode}` : ''}
+                      </Text>
                     )}
                   </View>
                   {!isWorker && <Feather name="edit-2" size={14} color="#aaa" />}
@@ -229,7 +312,7 @@ export default function PayrollScreen() {
                     <Text style={styles.value}>{fmt(record.salaryRate)}</Text>
                   </View>
                   <View style={styles.gridCell}>
-                    <Text style={styles.label}>Gross Salary</Text>
+                    <Text style={styles.label}>Monthly Salary</Text>
                     <Text style={styles.value}>{fmt(record.grossSalary)}</Text>
                   </View>
                   <View style={styles.gridCell}>
@@ -263,16 +346,51 @@ export default function PayrollScreen() {
         </ScrollView>
       )}
 
-      <Modal visible={!!editing} transparent animationType="slide" onRequestClose={closeEdit}>
-        <KeyboardAvoidingView behavior="padding" style={styles.sheetWrapper}>
-          <Pressable style={styles.backdrop} onPress={closeEdit} />
-          <View style={styles.sheet}>
-            <View style={styles.handle} />
-            <Text style={styles.sheetTitle}>{editDraft.employeeName}</Text>
-            {editDraft.employeeCode && (
-              <Text style={styles.sheetSubtitle}>{editDraft.employeeCode}</Text>
-            )}
-            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+      {/* Edit modal — pageSheet for room to show payment history */}
+      <Modal visible={!!editing} animationType="slide" presentationStyle="pageSheet" onRequestClose={closeEdit}>
+        <SafeAreaView style={styles.modalRoot}>
+          {/* Modal header */}
+          <View style={styles.modalHeader}>
+            <TouchableOpacity onPress={closeEdit} hitSlop={8}>
+              <Feather name="x" size={22} color="#333" />
+            </TouchableOpacity>
+            <View style={{ flex: 1, marginHorizontal: 12 }}>
+              <Text style={styles.sheetTitle} numberOfLines={1}>{editDraft.employeeName}</Text>
+              {(editDraft.lsNumber || editDraft.employeeCode) && (
+                <Text style={styles.sheetSubtitle}>
+                  {editDraft.lsNumber ?? editDraft.employeeCode}
+                </Text>
+              )}
+            </View>
+            <TouchableOpacity style={styles.doneBtn} onPress={commitEdit}>
+              <Text style={styles.doneBtnText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+            <ScrollView
+              contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              {/* Summary chips */}
+              <View style={styles.summaryRow}>
+                {[
+                  { label: 'All-time Earned', value: summary?.allTimeEarned, color: '#D8F3DC' },
+                  { label: 'Total Paid',       value: summary?.allTimePaid,   color: '#DBEAFE' },
+                  { label: 'Outstanding',      value: summary?.outstanding,   color: '#EDE9FE' },
+                ].map(({ label, value, color }) => (
+                  <View key={label} style={[styles.summaryChip, { backgroundColor: color }]}>
+                    <Text style={styles.summaryChipLabel}>{label}</Text>
+                    <Text style={styles.summaryChipValue}>
+                      {loadingSummary ? '…' : `Ksh ${Number(value ?? 0).toLocaleString()}`}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+
+              {/* Payroll entry fields */}
+              <Text style={styles.sectionHeading}>Monthly Entry</Text>
               <View style={styles.inputRow}>
                 <View style={styles.inputHalf}>
                   <Text style={styles.inputLabel}>Days Worked</Text>
@@ -300,7 +418,7 @@ export default function PayrollScreen() {
 
               <View style={styles.inputRow}>
                 <View style={styles.inputHalf}>
-                  <Text style={styles.inputLabel}>Gross Salary</Text>
+                  <Text style={styles.inputLabel}>Monthly Salary</Text>
                   <TextInput
                     style={styles.textInput}
                     value={editDraft.grossSalary != null ? String(editDraft.grossSalary) : ''}
@@ -359,13 +477,66 @@ export default function PayrollScreen() {
                 maxLength={500}
               />
 
-              <TouchableOpacity style={styles.doneBtn} onPress={commitEdit}>
-                <Text style={styles.doneBtnText}>Done</Text>
-              </TouchableOpacity>
-              <View style={{ height: 8 }} />
+              {/* Payments section */}
+              <View style={styles.paySection}>
+                <View style={styles.paySectionHeader}>
+                  <Text style={styles.sectionHeading}>Payment History</Text>
+                  <TouchableOpacity
+                    style={styles.addPayBtn}
+                    onPress={() => setShowAddPayment(s => !s)}
+                  >
+                    <Feather name="plus" size={14} color="#fff" />
+                    <Text style={styles.addPayBtnText}>Add</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {showAddPayment && (
+                  <View style={styles.addPayForm}>
+                    <Text style={styles.payFieldLabel}>Date (YYYY-MM-DD)</Text>
+                    <TextInput style={styles.payFieldInput} value={payDate} onChangeText={setPayDate} placeholder={TODAY} placeholderTextColor="#bbb" maxLength={10} />
+                    <Text style={styles.payFieldLabel}>Amount (Ksh)</Text>
+                    <TextInput style={styles.payFieldInput} value={payAmount} onChangeText={setPayAmount} keyboardType="numeric" placeholder="0" placeholderTextColor="#bbb" maxLength={10} />
+                    <Text style={styles.payFieldLabel}>Note (optional)</Text>
+                    <TextInput style={styles.payFieldInput} value={payNote} onChangeText={setPayNote} placeholder="Advance, week 1…" placeholderTextColor="#bbb" maxLength={200} />
+                    <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
+                      <TouchableOpacity style={styles.payCancelBtn} onPress={() => setShowAddPayment(false)}>
+                        <Text style={styles.payCancelText}>Cancel</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.paySaveBtn, (!(parseFloat(payAmount) > 0) || !payDate || payLoading) && { opacity: 0.5 }]}
+                        onPress={handleAddPayment}
+                        disabled={!(parseFloat(payAmount) > 0) || !payDate || payLoading}
+                      >
+                        {payLoading
+                          ? <ActivityIndicator size="small" color="#fff" />
+                          : <Text style={styles.paySaveText}>Save</Text>}
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+
+                {loadingSummary ? (
+                  <ActivityIndicator size="small" color="#2d6a4f" style={{ marginVertical: 12 }} />
+                ) : !summary || summary.payments.length === 0 ? (
+                  <Text style={styles.payEmptyText}>No payments recorded yet.</Text>
+                ) : (
+                  summary.payments.map(p => (
+                    <View key={p.id} style={styles.payRow}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.payDate}>{p.paymentDate}</Text>
+                        {p.note ? <Text style={styles.payNote}>{p.note}</Text> : null}
+                      </View>
+                      <Text style={styles.payAmt}>Ksh {Number(p.amount).toLocaleString()}</Text>
+                      <TouchableOpacity onPress={() => handleDeletePayment(p.id, p.amount, p.paymentDate)} hitSlop={8} style={{ marginLeft: 8 }}>
+                        <Feather name="trash-2" size={16} color="#e53e3e" />
+                      </TouchableOpacity>
+                    </View>
+                  ))
+                )}
+              </View>
             </ScrollView>
-          </View>
-        </KeyboardAvoidingView>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
       </Modal>
     </View>
   );
@@ -420,15 +591,20 @@ const styles = StyleSheet.create({
   value: { fontSize: 15, fontWeight: '600', color: '#1a1a1a' },
   valueAlert: { color: '#e53e3e' },
 
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)' },
-  sheetWrapper: { flex: 1, justifyContent: 'flex-end' },
-  sheet: {
-    backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20,
-    paddingHorizontal: 16, paddingBottom: 32, maxHeight: '90%',
-  },
-  handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#e0e0e0', alignSelf: 'center', marginTop: 12, marginBottom: 14 },
-  sheetTitle: { fontSize: 17, fontWeight: '700', color: '#1a1a1a', textAlign: 'center', marginBottom: 2 },
-  sheetSubtitle: { fontSize: 12, color: '#aaa', textAlign: 'center', marginBottom: 14 },
+  // Page-sheet modal
+  modalRoot:   { flex: 1, backgroundColor: '#f5f7f9' },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#fff', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#eee' },
+  sheetTitle:    { fontSize: 16, fontWeight: '700', color: '#1a1a1a' },
+  sheetSubtitle: { fontSize: 12, color: '#2d6a4f', fontWeight: '600', marginTop: 1 },
+  doneBtn: { backgroundColor: '#2d6a4f', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 16 },
+  doneBtnText: { fontSize: 14, fontWeight: '700', color: '#fff' },
+
+  summaryRow:  { flexDirection: 'row', gap: 8, marginBottom: 16 },
+  summaryChip: { flex: 1, borderRadius: 10, padding: 10, alignItems: 'center' },
+  summaryChipLabel: { fontSize: 9, fontWeight: '600', color: '#555', textAlign: 'center', marginBottom: 3 },
+  summaryChipValue: { fontSize: 13, fontWeight: '800', color: '#1a1a1a', textAlign: 'center' },
+
+  sectionHeading: { fontSize: 14, fontWeight: '700', color: '#333', marginBottom: 10 },
 
   inputRow: { flexDirection: 'row', gap: 10 },
   inputHalf: { flex: 1 },
@@ -439,6 +615,22 @@ const styles = StyleSheet.create({
     backgroundColor: '#fafafa', marginBottom: 14,
   },
 
-  doneBtn: { backgroundColor: '#2d6a4f', borderRadius: 10, paddingVertical: 13, alignItems: 'center', marginTop: 4 },
-  doneBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+  paySection:       { marginTop: 8, backgroundColor: '#fff', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#eee' },
+  paySectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  addPayBtn:        { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: '#2d6a4f' },
+  addPayBtnText:    { fontSize: 13, color: '#fff', fontWeight: '600' },
+
+  addPayForm:      { backgroundColor: '#f0f9f4', borderRadius: 8, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: '#c8e6c9' },
+  payFieldLabel:   { fontSize: 12, fontWeight: '600', color: '#555', marginBottom: 4 },
+  payFieldInput:   { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14, color: '#1a1a1a', backgroundColor: '#fff', marginBottom: 10 },
+  payCancelBtn:    { flex: 1, paddingVertical: 10, borderRadius: 8, borderWidth: 1, borderColor: '#ddd', alignItems: 'center' },
+  payCancelText:   { fontSize: 14, color: '#555', fontWeight: '600' },
+  paySaveBtn:      { flex: 2, paddingVertical: 10, borderRadius: 8, backgroundColor: '#2d6a4f', alignItems: 'center' },
+  paySaveText:     { fontSize: 14, color: '#fff', fontWeight: '700' },
+
+  payRow:      { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#f0f0f0' },
+  payDate:     { fontSize: 14, fontWeight: '600', color: '#1a1a1a' },
+  payNote:     { fontSize: 12, color: '#888', marginTop: 1 },
+  payAmt:      { fontSize: 15, fontWeight: '700', color: '#2d6a4f' },
+  payEmptyText:{ fontSize: 13, color: '#bbb', textAlign: 'center', paddingVertical: 12 },
 });

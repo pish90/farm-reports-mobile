@@ -50,7 +50,7 @@ function AdminNavigator() {
         component={WorkersScreen}
         options={({ route }) => ({
           headerShown: true,
-          title: `${(route.params as { farmName: string }).farmName} — Workers`,
+          title: `${(route.params as { farmName: string }).farmName} — Register`,
           headerTitleStyle: { fontWeight: '600', fontSize: 17 },
           headerTintColor: '#2d6a4f',
         })}
@@ -109,7 +109,7 @@ function AttendanceNavigator() {
       <AttendanceStack.Screen
         name="Workers"
         component={WorkersScreen}
-        options={{ headerShown: true, title: 'Manage Workers', headerTitleStyle: { fontWeight: '600', fontSize: 17 }, headerTintColor: '#2d6a4f' }}
+        options={{ headerShown: true, title: 'Register', headerTitleStyle: { fontWeight: '600', fontSize: 17 }, headerTintColor: '#2d6a4f' }}
       />
     </AttendanceStack.Navigator>
   );
@@ -180,11 +180,11 @@ export default function MainNavigator() {
         tabBarStyle: { borderTopColor: '#eee' },
         tabBarIcon: ({ color, size }) => {
           const icons: Record<string, keyof typeof Feather.glyphMap> = {
-            Attendance: 'users',
+            Attendance: 'book-open',
             Livestock:  'tag',
             Milk:       'droplet',
             Expenses:   'dollar-sign',
-            Payroll:    'credit-card',
+            Payroll:    'briefcase',
             Admin:      isOpsManager ? 'dollar-sign' : isManager ? 'clipboard' : 'grid',
             Settings:   'settings',
           };
@@ -192,11 +192,11 @@ export default function MainNavigator() {
         },
       })}
     >
-      {showFarmTabs && <Tab.Screen name="Attendance" component={AttendanceNavigator} />}
+      {showFarmTabs && <Tab.Screen name="Attendance" component={AttendanceNavigator} options={{ tabBarLabel: 'Register' }} />}
       {showFarmTabs && <Tab.Screen name="Livestock"  component={LivestockNavigator} />}
       {showFarmTabs && <Tab.Screen name="Milk"       component={MilkNavigator} />}
       {showFarmTabs && <Tab.Screen name="Expenses"   component={ExpensesNavigator} />}
-      {(isManager || isAdmin) && <Tab.Screen name="Payroll" component={PayrollNavigator} />}
+      {(isManager || isAdmin) && <Tab.Screen name="Payroll" component={PayrollNavigator} options={{ tabBarLabel: 'Work' }} />}
       {(isAdmin || isManager || isOpsManager) && (
         <Tab.Screen
           name="Admin"
