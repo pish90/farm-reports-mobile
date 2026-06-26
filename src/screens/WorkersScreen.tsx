@@ -113,6 +113,7 @@ function AddEmployeeModal({
   const [lastName, setLast]     = useState('');
   const [phone, setPhone]       = useState('');
   const [nationalId, setNatId]  = useState('');
+  const [gender, setGender]     = useState<'Male' | 'Female' | 'Other' | ''>('');
   const [dob, setDob]           = useState('');
   const [startDate, setStart]   = useState('');
   const [dailyRate, setRate]     = useState('');
@@ -123,7 +124,7 @@ function AddEmployeeModal({
 
   function reset() {
     setType('SALARIED'); setFirst(''); setLast(''); setPhone('');
-    setNatId(''); setDob(''); setStart(''); setRate('');
+    setNatId(''); setGender(''); setDob(''); setStart(''); setRate('');
     setPhotoUri(null); setPhotoBase64(null); setPhotoMimeType(null);
   }
 
@@ -173,6 +174,7 @@ function AddEmployeeModal({
         phone: phone.trim() || null,
         employmentType: type,
         nationalId: nationalId.trim() || null,
+        gender: gender || null,
         dateOfBirth: dob.trim() || null,
         startDate: startDate.trim() || null,
         defaultDailyRate: type === 'CASUAL' && dailyRate ? parseFloat(dailyRate) : null,
@@ -234,6 +236,19 @@ function AddEmployeeModal({
               <Text style={addS.label}>National ID</Text>
               <TextInput style={addS.input} value={nationalId} onChangeText={setNatId} placeholder="e.g. 12345678" placeholderTextColor="#bbb" maxLength={20} />
 
+              <Text style={addS.label}>Gender</Text>
+              <View style={addS.genderRow}>
+                {(['Male', 'Female', 'Other'] as const).map(g => (
+                  <TouchableOpacity
+                    key={g}
+                    style={[addS.genderBtn, gender === g && addS.genderBtnActive]}
+                    onPress={() => setGender(gender === g ? '' : g)}
+                  >
+                    <Text style={[addS.genderBtnText, gender === g && addS.genderBtnTextActive]}>{g}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
               <Text style={addS.label}>Date of Birth (YYYY-MM-DD)</Text>
               <TextInput style={addS.input} value={dob} onChangeText={setDob} placeholder="e.g. 1990-05-15" placeholderTextColor="#bbb" maxLength={10} />
 
@@ -289,6 +304,11 @@ const addS = StyleSheet.create({
 
   label:   { fontSize: 13, fontWeight: '600', color: '#555', marginBottom: 5 },
   input:   { borderWidth: 1, borderColor: '#ddd', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#1a1a1a', backgroundColor: '#fafafa', marginBottom: 14 },
+  genderRow:         { flexDirection: 'row', gap: 8, marginBottom: 14 },
+  genderBtn:         { flex: 1, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: '#ddd', alignItems: 'center', backgroundColor: '#fafafa' },
+  genderBtnActive:   { borderColor: '#2d6a4f', backgroundColor: '#e8f5ef' },
+  genderBtnText:     { fontSize: 14, fontWeight: '600', color: '#888' },
+  genderBtnTextActive: { color: '#2d6a4f' },
   actions: { flexDirection: 'row', gap: 12, marginTop: 4 },
   cancelBtn:      { flex: 1, paddingVertical: 14, borderRadius: 10, borderWidth: 1, borderColor: '#ddd', alignItems: 'center' },
   cancelText:     { fontSize: 15, color: '#555', fontWeight: '600' },
@@ -405,6 +425,7 @@ function EmployeeDetailModal({
         employmentType: employee.employmentType,
         jobTitle: employee.jobTitle,
         nationalId: employee.nationalId,
+        gender: employee.gender,
         dateOfBirth: employee.dateOfBirth,
         startDate: employee.startDate,
         defaultDailyRate: employee.defaultDailyRate,
@@ -467,6 +488,7 @@ function EmployeeDetailModal({
           <View style={detS.infoCard}>
             {employee.phone ? <InfoRow label="Phone" value={employee.phone} /> : null}
             {employee.nationalId ? <InfoRow label="National ID" value={employee.nationalId} /> : null}
+            {employee.gender ? <InfoRow label="Gender" value={employee.gender} /> : null}
             {employee.dateOfBirth ? <InfoRow label="Date of Birth" value={`${employee.dateOfBirth}${employee.age ? `  (Age ${employee.age})` : ''}`} /> : null}
             {employee.startDate ? <InfoRow label="Start Date" value={employee.startDate} /> : null}
             {employee.jobTitle ? <InfoRow label="Job Title" value={employee.jobTitle} /> : null}

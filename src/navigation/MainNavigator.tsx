@@ -50,7 +50,7 @@ function AdminNavigator() {
         component={WorkersScreen}
         options={({ route }) => ({
           headerShown: true,
-          title: `${(route.params as { farmName: string }).farmName} — Register`,
+          title: `${(route.params as { farmName: string }).farmName} — Staff`,
           headerTitleStyle: { fontWeight: '600', fontSize: 17 },
           headerTintColor: '#2d6a4f',
         })}
@@ -109,7 +109,7 @@ function AttendanceNavigator() {
       <AttendanceStack.Screen
         name="Workers"
         component={WorkersScreen}
-        options={{ headerShown: true, title: 'Register', headerTitleStyle: { fontWeight: '600', fontSize: 17 }, headerTintColor: '#2d6a4f' }}
+        options={{ headerShown: true, title: 'Staff Registry', headerTitleStyle: { fontWeight: '600', fontSize: 17 }, headerTintColor: '#2d6a4f' }}
       />
     </AttendanceStack.Navigator>
   );
@@ -180,7 +180,7 @@ export default function MainNavigator() {
         tabBarStyle: { borderTopColor: '#eee' },
         tabBarIcon: ({ color, size }) => {
           const icons: Record<string, keyof typeof Feather.glyphMap> = {
-            Attendance: 'book-open',
+            Attendance: 'users',
             Livestock:  'tag',
             Milk:       'droplet',
             Expenses:   'dollar-sign',
@@ -192,7 +192,7 @@ export default function MainNavigator() {
         },
       })}
     >
-      {showFarmTabs && <Tab.Screen name="Attendance" component={AttendanceNavigator} options={{ tabBarLabel: 'Register' }} />}
+      {showFarmTabs && <Tab.Screen name="Attendance" component={AttendanceNavigator} options={{ tabBarLabel: 'Staff' }} />}
       {showFarmTabs && <Tab.Screen name="Livestock"  component={LivestockNavigator} />}
       {showFarmTabs && <Tab.Screen name="Milk"       component={MilkNavigator} />}
       {showFarmTabs && <Tab.Screen name="Expenses"   component={ExpensesNavigator} />}

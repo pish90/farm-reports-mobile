@@ -63,6 +63,7 @@ export default function PayrollScreen() {
 
   const [editing, setEditing] = useState<PayrollRecord | null>(null);
   const [editDraft, setEditDraft] = useState<Partial<PayrollRecord>>({});
+  const [baseRemaining, setBaseRemaining] = useState<number>(0);
 
   // Payment section state
   const [summary, setSummary] = useState<EmployeeSummaryDto | null>(null);
@@ -108,6 +109,8 @@ export default function PayrollScreen() {
     if (isWorker) return;
     setEditing(record);
     setEditDraft({ ...record });
+    // carry-forward = what was seeded from prior month before this month's salary is added
+    setBaseRemaining(record.amountRemaining ?? 0);
     setSummary(null);
     setShowAddPayment(false);
     setPayDate(TODAY); setPayAmount(''); setPayNote('');
@@ -166,11 +169,16 @@ export default function PayrollScreen() {
     const numericFields: Array<keyof PayrollRecord> = [
       'salaryRate', 'daysWorked', 'grossSalary', 'loans', 'amountPaid', 'amountRemaining',
     ];
-    if (numericFields.includes(field)) {
-      setEditDraft(prev => ({ ...prev, [field]: raw === '' ? null : parseNum(raw) }));
-    } else {
-      setEditDraft(prev => ({ ...prev, [field]: raw === '' ? null : raw }));
-    }
+    setEditDraft(prev => {
+      const updated = { ...prev, [field]: numericFields.includes(field) ? (raw === '' ? null : parseNum(raw)) : (raw === '' ? null : raw) };
+      // Auto-recalculate Amount Remaining = carry-forward + Monthly Salary − Amount Paid
+      if (field === 'grossSalary' || field === 'amountPaid') {
+        const salary = field === 'grossSalary' ? parseNum(raw) : (prev.grossSalary ?? 0);
+        const paid   = field === 'amountPaid'  ? parseNum(raw) : (prev.amountPaid  ?? 0);
+        updated.amountRemaining = baseRemaining + (salary ?? 0) - (paid ?? 0);
+      }
+      return updated;
+    });
   }
 
   async function handleAddPayment() {

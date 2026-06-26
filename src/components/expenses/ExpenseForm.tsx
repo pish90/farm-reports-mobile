@@ -1,12 +1,11 @@
 import { Feather } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import {
   Alert,
   Image,
-  Keyboard,
   KeyboardAvoidingView,
   Linking,
   Modal,
@@ -28,7 +27,6 @@ const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
-const SHARED_BU_CODE = 'CC-900';
 
 function getDaysInMonth(year: number, month: number): number {
   return new Date(year, month, 0).getDate();
@@ -78,30 +76,6 @@ interface Props {
   onCancel: () => void;
 }
 
-// ─── Picker row ──────────────────────────────────────────────────────────────
-
-interface PickerRowProps {
-  label: string;
-  value: string | null;
-  onPress: () => void;
-  placeholder: string;
-  required?: boolean;
-}
-
-function PickerRow({ label, value, onPress, placeholder, required }: PickerRowProps) {
-  return (
-    <View>
-      <Text style={styles.label}>{label}{required ? ' *' : ''}</Text>
-      <TouchableOpacity style={styles.pickerButton} onPress={() => { Keyboard.dismiss(); onPress(); }} activeOpacity={0.7}>
-        <Text style={value ? styles.pickerValue : styles.pickerPlaceholder}>
-          {value ?? placeholder}
-        </Text>
-        <Text style={styles.pickerChevron}>›</Text>
-      </TouchableOpacity>
-    </View>
-  );
-}
-
 // ─── Inline picker overlay (renders inside the parent Modal) ─────────────────
 
 interface DropdownProps<T> {
@@ -144,75 +118,20 @@ export default function ExpenseForm({ visible, year, month, initial, isEditing, 
   const daysInMonth = getDaysInMonth(year, month);
   const scrollRef = useRef<ScrollView>(null);
 
-  const [showCatPicker, setShowCatPicker] = useState(false);
-  const [showBuPicker,  setShowBuPicker]  = useState(false);
-  const [showApportBuPicker, setShowApportBuPicker] = useState<number | null>(null);
   const [previewUri, setPreviewUri] = useState<string | null>(null);
 
   const { control, handleSubmit, reset, setValue, formState: { errors } } =
     useForm<ExpenseFormValues>({ defaultValues: EMPTY });
 
   const watchedCost = useWatch({ control, name: 'cost' });
-  const watchedBuId = useWatch({ control, name: 'business_unit_id' });
-  const watchedCategoryId   = useWatch({ control, name: 'category_id' });
-  const watchedCategoryCode = useWatch({ control, name: 'category_code' });
-  const watchedCategoryName = useWatch({ control, name: 'category_name' });
-  const watchedBuCode = useWatch({ control, name: 'business_unit_code' });
-  const watchedBuName = useWatch({ control, name: 'business_unit_name' });
-  const watchedApportionments = useWatch({ control, name: 'apportionments' });
   const watchedReceiptUris = useWatch({ control, name: 'receipt_image_uris' });
 
-  const isShared = useMemo(() => {
-    return watchedBuId != null &&
-      businessUnits.find((b) => b.id === watchedBuId)?.code === SHARED_BU_CODE;
-  }, [watchedBuId, businessUnits]);
-
-  const nonSharedUnits = useMemo(
-    () => businessUnits.filter((b) => b.code !== SHARED_BU_CODE),
-    [businessUnits],
-  );
-
-  // Auto-calculate amounts when percentages change
-  useEffect(() => {
-    if (!isShared) return;
-    const total = parseFloat(watchedCost) || 0;
-    const apports = watchedApportionments ?? [];
-    const updated = apports.map((ap) => {
-      const pct = parseFloat(ap.percentage) || 0;
-      return { ...ap, amount: total > 0 ? ((pct / 100) * total).toFixed(2) : '' };
-    });
-    if (JSON.stringify(updated) !== JSON.stringify(apports)) {
-      setValue('apportionments', updated);
-    }
-  }, [watchedCost, watchedApportionments?.map((a) => a.percentage).join(','), isShared]);
 
   useEffect(() => {
     if (visible) {
       reset(initial ?? EMPTY);
-    } else {
-      setShowCatPicker(false);
-      setShowBuPicker(false);
-      setShowApportBuPicker(null);
     }
   }, [visible]);
-
-  const addApportionmentRow = () => {
-    setValue('apportionments', [
-      ...(watchedApportionments ?? []),
-      { business_unit_id: 0, business_unit_code: '', business_unit_name: '', percentage: '', amount: '' },
-    ]);
-  };
-
-  const removeApportionmentRow = (idx: number) => {
-    const updated = (watchedApportionments ?? []).filter((_, i) => i !== idx);
-    setValue('apportionments', updated);
-  };
-
-  const totalApportionedPct = (watchedApportionments ?? []).reduce(
-    (s, ap) => s + (parseFloat(ap.percentage) || 0), 0,
-  );
-  const pctWarning = isShared && (watchedApportionments ?? []).length > 0 &&
-    Math.abs(totalApportionedPct - 100) > 0.01;
 
   async function pickReceipt(source: 'camera' | 'gallery') {
     const perm = source === 'camera'
@@ -253,13 +172,8 @@ export default function ExpenseForm({ visible, year, month, initial, isEditing, 
     setValue('receipt_image_uris', (watchedReceiptUris ?? []).filter((_, i) => i !== idx));
   }
 
-  const anyPickerOpen = showCatPicker || showBuPicker || showApportBuPicker !== null;
-
   function handleRequestClose() {
     if (previewUri) { setPreviewUri(null); return; }
-    if (showApportBuPicker !== null) { setShowApportBuPicker(null); return; }
-    if (showBuPicker) { setShowBuPicker(false); return; }
-    if (showCatPicker) { setShowCatPicker(false); return; }
     onCancel();
   }
 
@@ -268,7 +182,6 @@ export default function ExpenseForm({ visible, year, month, initial, isEditing, 
       <Pressable
         style={styles.backdrop}
         onPress={onCancel}
-        pointerEvents={anyPickerOpen ? 'none' : 'auto'}
       />
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -346,25 +259,6 @@ export default function ExpenseForm({ visible, year, month, initial, isEditing, 
               )}
             />
 
-            {/* Category */}
-            <Text style={styles.label}>Category</Text>
-            <TouchableOpacity style={styles.pickerButton} onPress={() => { Keyboard.dismiss(); setShowCatPicker(true); }} activeOpacity={0.7}>
-              <Text style={watchedCategoryId != null && watchedCategoryCode ? styles.pickerValue : styles.pickerPlaceholder}>
-                {watchedCategoryId != null && watchedCategoryCode
-                  ? `${watchedCategoryCode} – ${watchedCategoryName}`
-                  : 'Select category'}
-              </Text>
-              <Text style={styles.pickerChevron}>›</Text>
-            </TouchableOpacity>
-
-            {/* Business Unit */}
-            <PickerRow
-              label="Business Unit"
-              value={watchedBuId != null && watchedBuName ? `${watchedBuCode} – ${watchedBuName}` : null}
-              onPress={() => { Keyboard.dismiss(); setShowBuPicker(true); }}
-              placeholder="Select business unit"
-            />
-
             {/* Amount */}
             <Text style={styles.label}>Amount (Ksh) *</Text>
             <Controller
@@ -383,61 +277,6 @@ export default function ExpenseForm({ visible, year, month, initial, isEditing, 
               )}
             />
             {errors.cost && <Text style={styles.errorText}>{errors.cost.message}</Text>}
-
-            {/* CC-900 Apportionment */}
-            {isShared && (
-              <View style={styles.apportionBox}>
-                <View style={styles.apportionHeader}>
-                  <Text style={styles.apportionTitle}>Cost Apportionment</Text>
-                  {watchedCost ? (
-                    <Text style={styles.apportionTotalAmt}>
-                      Total: Ksh {parseFloat(watchedCost).toLocaleString('en-KE', { minimumFractionDigits: 2 })}
-                    </Text>
-                  ) : null}
-                </View>
-                {(watchedApportionments ?? []).map((ap, idx) => (
-                  <View key={idx} style={styles.apportionRow}>
-                    <TouchableOpacity
-                      style={styles.apportionBuBtn}
-                      onPress={() => { Keyboard.dismiss(); setShowApportBuPicker(idx); }}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={ap.business_unit_name ? styles.pickerValue : styles.pickerPlaceholder}>
-                        {ap.business_unit_name || 'Select unit'}
-                      </Text>
-                    </TouchableOpacity>
-                    <TextInput
-                      style={styles.apportionPctInput}
-                      value={ap.percentage}
-                      onChangeText={(v) => {
-                        const updated = [...(watchedApportionments ?? [])];
-                        updated[idx] = { ...updated[idx], percentage: v };
-                        setValue('apportionments', updated);
-                      }}
-                      keyboardType="decimal-pad"
-                      placeholder="%"
-                      placeholderTextColor="#bbb"
-                      maxLength={6}
-                    />
-                    <Text style={styles.apportionAmount}>
-                      {ap.amount ? `${parseFloat(ap.amount).toLocaleString('en-KE', { minimumFractionDigits: 2 })}` : '—'}
-                    </Text>
-                    <TouchableOpacity onPress={() => removeApportionmentRow(idx)} hitSlop={8}>
-                      <Text style={styles.apportionRemove}>✕</Text>
-                    </TouchableOpacity>
-                  </View>
-                ))}
-
-                <View style={styles.apportionFooter}>
-                  <TouchableOpacity style={styles.addApportionBtn} onPress={addApportionmentRow}>
-                    <Text style={styles.addApportionText}>+ Add unit</Text>
-                  </TouchableOpacity>
-                  <Text style={[styles.pctTotal, pctWarning && styles.pctWarning]}>
-                    {totalApportionedPct.toFixed(1)}% {pctWarning ? '⚠ must equal 100%' : ''}
-                  </Text>
-                </View>
-              </View>
-            )}
 
             {/* Receipt Photos */}
             <Text style={styles.label}>
@@ -487,78 +326,6 @@ export default function ExpenseForm({ visible, year, month, initial, isEditing, 
           </View>
         </View>
       </KeyboardAvoidingView>
-
-      {/* iOS: pickers inside same Modal (avoids sibling-Modal touch bug on iOS)
-          Android: pickers in own Modals (avoids touch-bleed and z-order issues) */}
-      {Platform.OS === 'ios' ? (
-        <>
-          {showCatPicker && (
-            <Dropdown
-              title="Select Category"
-              items={categories}
-              getKey={(c) => String(c.id)}
-              getLabel={(c) => `${c.accountCode} – ${c.accountName}`}
-              onSelect={(c) => { setValue('category_id', c.id); setValue('category_code', c.accountCode); setValue('category_name', c.accountName); }}
-              onClose={() => setShowCatPicker(false)}
-            />
-          )}
-          {showBuPicker && (
-            <Dropdown
-              title="Select Business Unit"
-              items={businessUnits}
-              getKey={(b) => String(b.id)}
-              getLabel={(b) => `${b.code} – ${b.name}`}
-              onSelect={(b) => { setValue('business_unit_id', b.id); setValue('business_unit_code', b.code); setValue('business_unit_name', b.name); if (b.code !== SHARED_BU_CODE) setValue('apportionments', []); }}
-              onClose={() => setShowBuPicker(false)}
-            />
-          )}
-          {showApportBuPicker !== null && (
-            <Dropdown
-              title="Select Business Unit"
-              items={nonSharedUnits}
-              getKey={(b) => String(b.id)}
-              getLabel={(b) => `${b.code} – ${b.name}`}
-              onSelect={(b) => { const updated = [...(watchedApportionments ?? [])]; updated[showApportBuPicker!] = { ...updated[showApportBuPicker!], business_unit_id: b.id, business_unit_code: b.code, business_unit_name: b.name }; setValue('apportionments', updated); }}
-              onClose={() => setShowApportBuPicker(null)}
-            />
-          )}
-        </>
-      ) : (
-        <>
-          <Modal visible={showCatPicker} transparent animationType="slide" onRequestClose={() => setShowCatPicker(false)}>
-            <Dropdown
-              title="Select Category"
-              items={categories}
-              getKey={(c) => String(c.id)}
-              getLabel={(c) => `${c.accountCode} – ${c.accountName}`}
-              onSelect={(c) => { setValue('category_id', c.id); setValue('category_code', c.accountCode); setValue('category_name', c.accountName); }}
-              onClose={() => setShowCatPicker(false)}
-            />
-          </Modal>
-          <Modal visible={showBuPicker} transparent animationType="slide" onRequestClose={() => setShowBuPicker(false)}>
-            <Dropdown
-              title="Select Business Unit"
-              items={businessUnits}
-              getKey={(b) => String(b.id)}
-              getLabel={(b) => `${b.code} – ${b.name}`}
-              onSelect={(b) => { setValue('business_unit_id', b.id); setValue('business_unit_code', b.code); setValue('business_unit_name', b.name); if (b.code !== SHARED_BU_CODE) setValue('apportionments', []); }}
-              onClose={() => setShowBuPicker(false)}
-            />
-          </Modal>
-          <Modal visible={showApportBuPicker !== null} transparent animationType="slide" onRequestClose={() => setShowApportBuPicker(null)}>
-            {showApportBuPicker !== null && (
-              <Dropdown
-                title="Select Business Unit"
-                items={nonSharedUnits}
-                getKey={(b) => String(b.id)}
-                getLabel={(b) => `${b.code} – ${b.name}`}
-                onSelect={(b) => { const updated = [...(watchedApportionments ?? [])]; updated[showApportBuPicker!] = { ...updated[showApportBuPicker!], business_unit_id: b.id, business_unit_code: b.code, business_unit_name: b.name }; setValue('apportionments', updated); }}
-                onClose={() => setShowApportBuPicker(null)}
-              />
-            )}
-          </Modal>
-        </>
-      )}
 
       {/* Full-screen receipt preview */}
       {previewUri && (

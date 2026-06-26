@@ -158,6 +158,7 @@ export interface EmployeeDto {
   startDate: string | null;
   dateOfBirth: string | null;
   nationalId: string | null;
+  gender: string | null;
   age: number | null;
   status: 'ACTIVE' | 'INACTIVE';
   defaultDailyRate: number | null;
@@ -174,6 +175,7 @@ export interface EmployeeRequest {
   startDate?: string | null;
   dateOfBirth?: string | null;
   nationalId?: string | null;
+  gender?: string | null;
   defaultDailyRate?: number | null;
   photoBase64?: string | null;
   photoMimeType?: string | null;
