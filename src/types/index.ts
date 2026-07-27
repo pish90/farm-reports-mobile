@@ -120,13 +120,8 @@ export type MainTabParamList = {
   Livestock: undefined;
   Milk: undefined;
   Expenses: undefined;
-  Payroll: undefined;
   Admin: { screen?: string; params?: object };
   Settings: undefined;
-};
-
-export type PayrollStackParamList = {
-  PayrollHome: undefined;
 };
 
 export interface PayrollRecord {
@@ -323,13 +318,11 @@ export interface CasualPayrollEntry {
 }
 
 export type AttendanceStackParamList = {
-  AttendanceHome: undefined;
-  SalariedAttendance: undefined;
+  Workers: undefined;
   CasualHome: undefined;
   CreateWorkSession: { session?: CasualWorkSessionDto } | undefined;
   SelectCasuals: { currentSelection: Array<{ id: number; rateOverride?: number }>; defaultRate: number };
   CasualReport: undefined;
-  Workers: undefined;
 };
 
 export type LivestockStackParamList = {

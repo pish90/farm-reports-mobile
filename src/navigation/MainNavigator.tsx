@@ -6,8 +6,6 @@ import SyncStatusBadge from '../components/shared/SyncStatusBadge';
 import AdminDashboardScreen from '../screens/AdminDashboardScreen';
 import AdminFarmDetailScreen from '../screens/AdminFarmDetailScreen';
 import AuditLogScreen from '../screens/AuditLogScreen';
-import AttendanceLandingScreen from '../screens/AttendanceLandingScreen';
-import AttendanceScreen from '../screens/AttendanceScreen';
 import CasualAttendanceScreen from '../screens/CasualAttendanceScreen';
 import CreateWorkSessionScreen from '../screens/CreateWorkSessionScreen';
 import SelectCasualsScreen from '../screens/SelectCasualsScreen';
@@ -15,7 +13,6 @@ import CasualReportScreen from '../screens/CasualReportScreen';
 import ExpensesScreen from '../screens/expenses/ExpensesScreen';
 import LivestockScreen from '../screens/livestock/LivestockScreen';
 import MilkScreen from '../screens/milk/MilkScreen';
-import PayrollScreen from '../screens/PayrollScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import WorkersScreen from '../screens/WorkersScreen';
 import { useAuth } from '../store/AuthContext';
@@ -26,7 +23,6 @@ import {
   LivestockStackParamList,
   MainTabParamList,
   MilkStackParamList,
-  PayrollStackParamList,
 } from '../types';
 import { navigationRef } from './navigationRef';
 
@@ -75,21 +71,19 @@ const AttendanceStack = createNativeStackNavigator<AttendanceStackParamList>();
 const LivestockStack  = createNativeStackNavigator<LivestockStackParamList>();
 const MilkStack       = createNativeStackNavigator<MilkStackParamList>();
 const ExpensesStack   = createNativeStackNavigator<ExpensesStackParamList>();
-const PayrollStack    = createNativeStackNavigator<PayrollStackParamList>();
 
 function AttendanceNavigator() {
   return (
-    <AttendanceStack.Navigator screenOptions={{ headerShown: false }}>
-      <AttendanceStack.Screen name="AttendanceHome" component={AttendanceLandingScreen} />
+    <AttendanceStack.Navigator initialRouteName="Workers" screenOptions={{ headerShown: false }}>
       <AttendanceStack.Screen
-        name="SalariedAttendance"
-        component={AttendanceScreen}
-        options={{ headerShown: true, title: 'Salaried Attendance', headerTitleStyle: { fontWeight: '600', fontSize: 17 }, headerTintColor: '#2d6a4f' }}
+        name="Workers"
+        component={WorkersScreen}
+        options={{ headerShown: true, title: 'Staff Registry', headerTitleStyle: { fontWeight: '600', fontSize: 17 }, headerTintColor: '#2d6a4f' }}
       />
       <AttendanceStack.Screen
         name="CasualHome"
         component={CasualAttendanceScreen}
-        options={{ headerShown: true, title: 'Casual Attendance', headerTitleStyle: { fontWeight: '600', fontSize: 17 }, headerTintColor: '#7c3aed' }}
+        options={{ headerShown: true, title: 'Work Sessions', headerTitleStyle: { fontWeight: '600', fontSize: 17 }, headerTintColor: '#7c3aed' }}
       />
       <AttendanceStack.Screen
         name="CreateWorkSession"
@@ -105,11 +99,6 @@ function AttendanceNavigator() {
         name="CasualReport"
         component={CasualReportScreen}
         options={{ headerShown: true, title: 'Casual Report', headerTitleStyle: { fontWeight: '600', fontSize: 17 }, headerTintColor: '#7c3aed' }}
-      />
-      <AttendanceStack.Screen
-        name="Workers"
-        component={WorkersScreen}
-        options={{ headerShown: true, title: 'Staff Registry', headerTitleStyle: { fontWeight: '600', fontSize: 17 }, headerTintColor: '#2d6a4f' }}
       />
     </AttendanceStack.Navigator>
   );
@@ -136,14 +125,6 @@ function ExpensesNavigator() {
     <ExpensesStack.Navigator screenOptions={{ headerShown: false }}>
       <ExpensesStack.Screen name="ExpensesHome" component={ExpensesScreen} />
     </ExpensesStack.Navigator>
-  );
-}
-
-function PayrollNavigator() {
-  return (
-    <PayrollStack.Navigator screenOptions={{ headerShown: false }}>
-      <PayrollStack.Screen name="PayrollHome" component={PayrollScreen} />
-    </PayrollStack.Navigator>
   );
 }
 
@@ -184,7 +165,6 @@ export default function MainNavigator() {
             Livestock:  'tag',
             Milk:       'droplet',
             Expenses:   'dollar-sign',
-            Payroll:    'briefcase',
             Admin:      isOpsManager ? 'dollar-sign' : isManager ? 'clipboard' : 'grid',
             Settings:   'settings',
           };
@@ -196,7 +176,6 @@ export default function MainNavigator() {
       {showFarmTabs && <Tab.Screen name="Livestock"  component={LivestockNavigator} />}
       {showFarmTabs && <Tab.Screen name="Milk"       component={MilkNavigator} />}
       {showFarmTabs && <Tab.Screen name="Expenses"   component={ExpensesNavigator} />}
-      {(isManager || isAdmin) && <Tab.Screen name="Payroll" component={PayrollNavigator} options={{ tabBarLabel: 'Work' }} />}
       {(isAdmin || isManager || isOpsManager) && (
         <Tab.Screen
           name="Admin"

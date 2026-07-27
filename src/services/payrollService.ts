@@ -6,6 +6,9 @@ export async function getPayroll(farmId: number, year: number, month: number): P
   return res.data.data ?? [];
 }
 
-export async function savePayroll(farmId: number, year: number, month: number, entries: PayrollEntryRequest[]): Promise<void> {
-  await apiClient.put('/reports/payroll', entries, { params: { farmId, year, month } });
+export async function saveEmployeePayrollEntry(
+  farmId: number, year: number, month: number, employeeId: number, entry: PayrollEntryRequest,
+): Promise<PayrollRecord> {
+  const res = await apiClient.put(`/reports/payroll/${employeeId}`, entry, { params: { farmId, year, month } });
+  return res.data.data;
 }

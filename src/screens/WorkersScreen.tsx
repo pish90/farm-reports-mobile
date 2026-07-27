@@ -1,6 +1,7 @@
 import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -13,12 +14,13 @@ import {
   SafeAreaView,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
+import DateField from '../components/shared/DateField';
+import MonthYearSelector from '../components/shared/MonthYearSelector';
 import {
   createEmployee,
   deleteEmployeePayment,
@@ -29,22 +31,27 @@ import {
 } from '../services/employeeService';
 import {
   deletePayment,
-  downloadAndShareMonthlyExcel,
   getCasualLabourerSummary,
-  getCasualPayroll,
   recordPayment,
 } from '../services/casualLabourerService';
+import { getPayroll, saveEmployeePayrollEntry } from '../services/payrollService';
 import { useAuth } from '../store/AuthContext';
 import {
-  CasualLabourerPaymentDto,
+  AttendanceStackParamList,
   CasualLabourerSummaryDto,
-  CasualPayrollEntry,
   EmployeeDto,
   EmployeePaymentDto,
   EmployeeSummaryDto,
+  PayrollRecord,
 } from '../types';
 
 const TODAY = new Date().toISOString().slice(0, 10);
+
+// LS numbers carry a trailing farm letter (e.g. LS2032B) for the database/master
+// registry, but the client doesn't want that letter shown in the app.
+function displayLs(lsNumber: string): string {
+  return /^LS\d+[A-Za-z]$/.test(lsNumber) ? lsNumber.slice(0, -1) : lsNumber;
+}
 
 // ─── Employee row ─────────────────────────────────────────────────────────────
 
@@ -72,7 +79,7 @@ function EmployeeRow({
       <View style={{ flex: 1 }}>
         <Text style={rowS.name}>{employee.fullName}</Text>
         <Text style={[rowS.ls, { color: isSalaried ? '#2d6a4f' : '#7c3aed' }]}>
-          {employee.lsNumber}
+          {displayLs(employee.lsNumber)}
           {employee.employmentType === 'CASUAL' ? '  ·  Casual' : ''}
         </Text>
       </View>
@@ -249,11 +256,11 @@ function AddEmployeeModal({
                 ))}
               </View>
 
-              <Text style={addS.label}>Date of Birth (YYYY-MM-DD)</Text>
-              <TextInput style={addS.input} value={dob} onChangeText={setDob} placeholder="e.g. 1990-05-15" placeholderTextColor="#bbb" maxLength={10} />
+              <Text style={addS.label}>Date of Birth</Text>
+              <DateField value={dob} onChange={setDob} placeholder="Select date of birth" style={addS.input} allowFuture={false} />
 
-              <Text style={addS.label}>Start Date (YYYY-MM-DD)</Text>
-              <TextInput style={addS.input} value={startDate} onChangeText={setStart} placeholder={TODAY} placeholderTextColor="#bbb" maxLength={10} />
+              <Text style={addS.label}>Start Date</Text>
+              <DateField value={startDate} onChange={setStart} placeholder={TODAY} style={addS.input} />
 
               {type === 'CASUAL' && (
                 <>
@@ -333,6 +340,7 @@ function EmployeeDetailModal({
   onRefresh: () => void;
 }) {
   const isSalaried = employee?.employmentType === 'SALARIED';
+  const isActive   = employee?.status === 'ACTIVE';
   const accentColor = isSalaried ? '#2d6a4f' : '#7c3aed';
 
   const [summary,      setSummary]      = useState<EmployeeSummaryDto | CasualLabourerSummaryDto | null>(null);
@@ -346,10 +354,147 @@ function EmployeeDetailModal({
   // Status toggle
   const [togglingStatus, setTogglingStatus] = useState(false);
 
+  // Edit profile details
+  const [isEditing,  setIsEditing]  = useState(false);
+  const [editSaving, setEditSaving] = useState(false);
+  const [efFirst,    setEfFirst]    = useState('');
+  const [efLast,     setEfLast]     = useState('');
+  const [efPhone,    setEfPhone]    = useState('');
+  const [efNatId,    setEfNatId]    = useState('');
+  const [efGender,   setEfGender]   = useState<'Male' | 'Female' | 'Other' | ''>('');
+  const [efDob,      setEfDob]      = useState('');
+  const [efStart,    setEfStart]    = useState('');
+  const [efJobTitle, setEfJobTitle] = useState('');
+  const [efRate,     setEfRate]     = useState('');
+
+  // Monthly payroll entry (salaried only)
+  const now = new Date();
+  const [payYear,  setPayYear]  = useState(now.getFullYear());
+  const [payMonth, setPayMonth] = useState(now.getMonth() + 1);
+  const [payRecord,  setPayRecord]  = useState<PayrollRecord | null>(null);
+  const [payDraft,   setPayDraft]   = useState<Partial<PayrollRecord>>({});
+  const [baseRemaining, setBaseRemaining] = useState(0);
+  const [loadingPayRecord, setLoadingPayRecord] = useState(false);
+  const [payEntrySaveState, setPayEntrySaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+
   useEffect(() => {
     if (!visible || !employee) return;
     loadData();
   }, [visible, employee?.id]);
+
+  useEffect(() => {
+    if (!visible) setIsEditing(false);
+  }, [visible]);
+
+  useEffect(() => {
+    if (!visible || !employee || !isSalaried) return;
+    loadPayRecord();
+  }, [visible, employee?.id, isSalaried, payYear, payMonth]);
+
+  async function loadPayRecord() {
+    if (!employee) return;
+    setLoadingPayRecord(true);
+    try {
+      const rows = await getPayroll(farmId, payYear, payMonth);
+      const record = rows.find(r => r.employeeId === employee.id) ?? null;
+      setPayRecord(record);
+      setPayDraft(record ? { ...record } : {});
+      setBaseRemaining(record?.amountRemaining ?? 0);
+    } catch {
+      setPayRecord(null);
+      setPayDraft({});
+    } finally {
+      setLoadingPayRecord(false);
+    }
+  }
+
+  function setPayDraftField(field: keyof PayrollRecord, raw: string) {
+    const numericFields: Array<keyof PayrollRecord> = [
+      'salaryRate', 'daysWorked', 'grossSalary', 'loans', 'amountPaid', 'amountRemaining',
+    ];
+    setPayDraft(prev => {
+      const parsed = raw === '' ? null : parseFloat(raw.replace(/,/g, ''));
+      const updated = { ...prev, [field]: numericFields.includes(field) ? (isNaN(parsed as number) ? null : parsed) : (raw === '' ? null : raw) };
+      if (field === 'grossSalary' || field === 'amountPaid') {
+        const salary = field === 'grossSalary' ? parsed : (prev.grossSalary ?? 0);
+        const paid   = field === 'amountPaid'  ? parsed : (prev.amountPaid  ?? 0);
+        updated.amountRemaining = baseRemaining + (Number(salary) || 0) - (Number(paid) || 0);
+      }
+      return updated;
+    });
+  }
+
+  async function handleSavePayEntry() {
+    if (!employee) return;
+    setPayEntrySaveState('saving');
+    try {
+      await saveEmployeePayrollEntry(farmId, payYear, payMonth, employee.id, {
+        employeeId: employee.id,
+        salaryRate: payDraft.salaryRate ?? null,
+        daysWorked: payDraft.daysWorked ?? null,
+        grossSalary: payDraft.grossSalary ?? null,
+        loans: payDraft.loans ?? 0,
+        amountPaid: payDraft.amountPaid ?? 0,
+        amountRemaining: payDraft.amountRemaining ?? null,
+        notes: payDraft.notes ?? null,
+      });
+      setPayEntrySaveState('saved');
+      setTimeout(() => setPayEntrySaveState('idle'), 2000);
+    } catch {
+      setPayEntrySaveState('error');
+    }
+  }
+
+  function requireActive(action: () => void) {
+    if (!isActive) {
+      Alert.alert('Employee is Inactive', 'Set this employee to Active before editing their details or recording payments.');
+      return;
+    }
+    action();
+  }
+
+  function startEdit() {
+    if (!employee) return;
+    setEfFirst(employee.firstName ?? '');
+    setEfLast(employee.lastName ?? '');
+    setEfPhone(employee.phone ?? '');
+    setEfNatId(employee.nationalId ?? '');
+    setEfGender((employee.gender as 'Male' | 'Female' | 'Other' | null) ?? '');
+    setEfDob(employee.dateOfBirth ?? '');
+    setEfStart(employee.startDate ?? '');
+    setEfJobTitle(employee.jobTitle ?? '');
+    setEfRate(employee.defaultDailyRate != null ? String(employee.defaultDailyRate) : '');
+    setIsEditing(true);
+  }
+
+  async function handleSaveEdit() {
+    if (!employee) return;
+    const first = efFirst.trim();
+    if (!first) { Alert.alert('First name required'); return; }
+    setEditSaving(true);
+    try {
+      await updateEmployee(farmId, employee.id, {
+        firstName: first,
+        lastName: efLast.trim() || null,
+        phone: efPhone.trim() || null,
+        employmentType: employee.employmentType,
+        jobTitle: efJobTitle.trim() || null,
+        nationalId: efNatId.trim() || null,
+        gender: efGender || null,
+        dateOfBirth: efDob.trim() || null,
+        startDate: efStart.trim() || null,
+        defaultDailyRate: employee.employmentType === 'CASUAL' && efRate ? parseFloat(efRate) : null,
+        status: employee.status,
+      });
+      setIsEditing(false);
+      onRefresh();
+      onClose();
+    } catch (e: any) {
+      Alert.alert('Error', e.message ?? 'Failed to update employee.');
+    } finally {
+      setEditSaving(false);
+    }
+  }
 
   async function loadData() {
     if (!employee) return;
@@ -460,7 +605,17 @@ function EmployeeDetailModal({
             <Feather name="x" size={22} color="#333" />
           </TouchableOpacity>
           <Text style={detS.headerTitle}>Employee Details</Text>
-          <View style={{ width: 30 }} />
+          {isEditing
+            ? (
+              <TouchableOpacity onPress={handleSaveEdit} disabled={editSaving} hitSlop={8} style={{ width: 44, alignItems: 'flex-end' }}>
+                {editSaving ? <ActivityIndicator size="small" color="#2d6a4f" /> : <Text style={detS.headerAction}>Save</Text>}
+              </TouchableOpacity>
+            )
+            : (
+              <TouchableOpacity onPress={() => requireActive(startEdit)} hitSlop={8} style={{ width: 44, alignItems: 'flex-end' }}>
+                <Feather name="edit-2" size={19} color="#2d6a4f" />
+              </TouchableOpacity>
+            )}
         </View>
 
         <ScrollView contentContainerStyle={detS.scroll} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
@@ -476,7 +631,7 @@ function EmployeeDetailModal({
             <Text style={detS.name}>{employee.fullName}</Text>
             <View style={detS.badgeRow}>
               <View style={[detS.badge, { backgroundColor: isSalaried ? '#e8f5ef' : '#f3e8ff' }]}>
-                <Text style={[detS.badgeText, { color: accentColor }]}>{employee.lsNumber}</Text>
+                <Text style={[detS.badgeText, { color: accentColor }]}>{displayLs(employee.lsNumber)}</Text>
               </View>
               <View style={[detS.badge, { backgroundColor: '#f3f3f3' }]}>
                 <Text style={[detS.badgeText, { color: '#888' }]}>{isSalaried ? 'Salaried' : 'Casual'}</Text>
@@ -484,16 +639,67 @@ function EmployeeDetailModal({
             </View>
           </View>
 
+          {!isActive && (
+            <View style={detS.inactiveBanner}>
+              <Feather name="lock" size={14} color="#b45309" />
+              <Text style={detS.inactiveBannerText}>
+                This employee is inactive. Set them Active to edit details, monthly pay, or payments.
+              </Text>
+            </View>
+          )}
+
           {/* Profile details */}
           <View style={detS.infoCard}>
-            {employee.phone ? <InfoRow label="Phone" value={employee.phone} /> : null}
-            {employee.nationalId ? <InfoRow label="National ID" value={employee.nationalId} /> : null}
-            {employee.gender ? <InfoRow label="Gender" value={employee.gender} /> : null}
-            {employee.dateOfBirth ? <InfoRow label="Date of Birth" value={`${employee.dateOfBirth}${employee.age ? `  (Age ${employee.age})` : ''}`} /> : null}
-            {employee.startDate ? <InfoRow label="Start Date" value={employee.startDate} /> : null}
-            {employee.jobTitle ? <InfoRow label="Job Title" value={employee.jobTitle} /> : null}
-            {!employee.phone && !employee.nationalId && !employee.dateOfBirth && !employee.startDate && (
-              <Text style={detS.noInfo}>No profile details recorded.</Text>
+            {isEditing ? (
+              <>
+                <Text style={detS.fieldLabel}>First Name *</Text>
+                <TextInput style={detS.fieldInput} value={efFirst} onChangeText={setEfFirst} placeholder="First name" placeholderTextColor="#bbb" maxLength={100} />
+                <Text style={detS.fieldLabel}>Last Name</Text>
+                <TextInput style={detS.fieldInput} value={efLast} onChangeText={setEfLast} placeholder="Last name" placeholderTextColor="#bbb" maxLength={100} />
+                <Text style={detS.fieldLabel}>Phone</Text>
+                <TextInput style={detS.fieldInput} value={efPhone} onChangeText={setEfPhone} placeholder="+254…" placeholderTextColor="#bbb" keyboardType="phone-pad" maxLength={20} />
+                <Text style={detS.fieldLabel}>National ID</Text>
+                <TextInput style={detS.fieldInput} value={efNatId} onChangeText={setEfNatId} placeholder="e.g. 12345678" placeholderTextColor="#bbb" maxLength={20} />
+                <Text style={detS.fieldLabel}>Gender</Text>
+                <View style={detS.genderRow}>
+                  {(['Male', 'Female', 'Other'] as const).map(g => (
+                    <TouchableOpacity
+                      key={g}
+                      style={[detS.genderBtn, efGender === g && detS.genderBtnActive]}
+                      onPress={() => setEfGender(efGender === g ? '' : g)}
+                    >
+                      <Text style={[detS.genderBtnText, efGender === g && detS.genderBtnTextActive]}>{g}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <Text style={detS.fieldLabel}>Date of Birth</Text>
+                <DateField value={efDob} onChange={setEfDob} placeholder="Select date of birth" style={detS.fieldInput} accentColor={accentColor} allowFuture={false} />
+                <Text style={detS.fieldLabel}>Start Date</Text>
+                <DateField value={efStart} onChange={setEfStart} placeholder={TODAY} style={detS.fieldInput} accentColor={accentColor} />
+                <Text style={detS.fieldLabel}>Job Title</Text>
+                <TextInput style={detS.fieldInput} value={efJobTitle} onChangeText={setEfJobTitle} placeholder="e.g. Herdsman" placeholderTextColor="#bbb" maxLength={100} />
+                {!isSalaried && (
+                  <>
+                    <Text style={detS.fieldLabel}>Default Daily Rate (Ksh)</Text>
+                    <TextInput style={detS.fieldInput} value={efRate} onChangeText={setEfRate} keyboardType="numeric" placeholder="150" placeholderTextColor="#bbb" maxLength={10} />
+                  </>
+                )}
+                <TouchableOpacity style={detS.cancelSmBtn} onPress={() => setIsEditing(false)}>
+                  <Text style={detS.cancelSmText}>Cancel</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                {employee.phone ? <InfoRow label="Phone" value={employee.phone} /> : null}
+                {employee.nationalId ? <InfoRow label="National ID" value={employee.nationalId} /> : null}
+                {employee.gender ? <InfoRow label="Gender" value={employee.gender} /> : null}
+                {employee.dateOfBirth ? <InfoRow label="Date of Birth" value={`${employee.dateOfBirth}${employee.age ? `  (Age ${employee.age})` : ''}`} /> : null}
+                {employee.startDate ? <InfoRow label="Start Date" value={employee.startDate} /> : null}
+                {employee.jobTitle ? <InfoRow label="Job Title" value={employee.jobTitle} /> : null}
+                {!employee.phone && !employee.nationalId && !employee.dateOfBirth && !employee.startDate && (
+                  <Text style={detS.noInfo}>No profile details recorded.</Text>
+                )}
+              </>
             )}
           </View>
 
@@ -529,13 +735,129 @@ function EmployeeDetailModal({
             ))}
           </View>
 
+          {/* Monthly payroll entry — salaried only */}
+          {isSalaried && (
+            <View style={detS.section}>
+              <View style={detS.sectionHeader}>
+                <Text style={detS.sectionTitle}>Monthly Entry</Text>
+                {payEntrySaveState === 'saving' && <ActivityIndicator size="small" color={accentColor} />}
+                {payEntrySaveState === 'saved' && <Feather name="check-circle" size={16} color="#2d6a4f" />}
+                {payEntrySaveState === 'error' && <Feather name="alert-circle" size={16} color="#e53e3e" />}
+              </View>
+              <MonthYearSelector year={payYear} month={payMonth} onChange={(y, m) => { setPayYear(y); setPayMonth(m); }} />
+
+              {loadingPayRecord ? (
+                <ActivityIndicator size="small" color={accentColor} style={{ marginVertical: 16 }} />
+              ) : (
+                <View style={{ marginTop: 14 }}>
+                  <View style={detS.payEntryRow}>
+                    <View style={detS.payEntryHalf}>
+                      <Text style={detS.fieldLabel}>Days Worked</Text>
+                      <TextInput
+                        style={detS.fieldInput}
+                        editable={isActive}
+                        value={payDraft.daysWorked != null ? String(payDraft.daysWorked) : ''}
+                        onChangeText={t => setPayDraftField('daysWorked', t)}
+                        keyboardType="numeric"
+                        placeholder="0"
+                        placeholderTextColor="#bbb"
+                      />
+                    </View>
+                    <View style={detS.payEntryHalf}>
+                      <Text style={detS.fieldLabel}>Salary Rate</Text>
+                      <TextInput
+                        style={detS.fieldInput}
+                        editable={isActive}
+                        value={payDraft.salaryRate != null ? String(payDraft.salaryRate) : ''}
+                        onChangeText={t => setPayDraftField('salaryRate', t)}
+                        keyboardType="numeric"
+                        placeholder="0.00"
+                        placeholderTextColor="#bbb"
+                      />
+                    </View>
+                  </View>
+                  <View style={detS.payEntryRow}>
+                    <View style={detS.payEntryHalf}>
+                      <Text style={detS.fieldLabel}>Monthly Salary</Text>
+                      <TextInput
+                        style={detS.fieldInput}
+                        editable={isActive}
+                        value={payDraft.grossSalary != null ? String(payDraft.grossSalary) : ''}
+                        onChangeText={t => setPayDraftField('grossSalary', t)}
+                        keyboardType="numeric"
+                        placeholder="0.00"
+                        placeholderTextColor="#bbb"
+                      />
+                    </View>
+                    <View style={detS.payEntryHalf}>
+                      <Text style={detS.fieldLabel}>Loans</Text>
+                      <TextInput
+                        style={detS.fieldInput}
+                        editable={isActive}
+                        value={payDraft.loans != null ? String(payDraft.loans) : ''}
+                        onChangeText={t => setPayDraftField('loans', t)}
+                        keyboardType="numeric"
+                        placeholder="0.00"
+                        placeholderTextColor="#bbb"
+                      />
+                    </View>
+                  </View>
+                  <View style={detS.payEntryRow}>
+                    <View style={detS.payEntryHalf}>
+                      <Text style={detS.fieldLabel}>Amount Paid</Text>
+                      <TextInput
+                        style={detS.fieldInput}
+                        editable={isActive}
+                        value={payDraft.amountPaid != null ? String(payDraft.amountPaid) : ''}
+                        onChangeText={t => setPayDraftField('amountPaid', t)}
+                        keyboardType="numeric"
+                        placeholder="0.00"
+                        placeholderTextColor="#bbb"
+                      />
+                    </View>
+                    <View style={detS.payEntryHalf}>
+                      <Text style={detS.fieldLabel}>Amount Remaining</Text>
+                      <TextInput
+                        style={detS.fieldInput}
+                        editable={isActive}
+                        value={payDraft.amountRemaining != null ? String(payDraft.amountRemaining) : ''}
+                        onChangeText={t => setPayDraftField('amountRemaining', t)}
+                        keyboardType="numeric"
+                        placeholder="0.00"
+                        placeholderTextColor="#bbb"
+                      />
+                    </View>
+                  </View>
+                  <Text style={detS.fieldLabel}>Notes</Text>
+                  <TextInput
+                    style={[detS.fieldInput, { minHeight: 64, textAlignVertical: 'top' }]}
+                    editable={isActive}
+                    value={payDraft.notes ?? ''}
+                    onChangeText={t => setPayDraftField('notes', t)}
+                    placeholder="Optional notes…"
+                    placeholderTextColor="#bbb"
+                    multiline
+                    maxLength={500}
+                  />
+                  <TouchableOpacity
+                    style={[detS.savePayBtn, { backgroundColor: accentColor, alignSelf: 'flex-start', paddingHorizontal: 20 }, (!isActive || payEntrySaveState === 'saving') && { opacity: 0.5 }]}
+                    onPress={() => requireActive(handleSavePayEntry)}
+                    disabled={!isActive || payEntrySaveState === 'saving'}
+                  >
+                    <Text style={detS.savePayText}>Save Entry</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          )}
+
           {/* Payments section */}
           <View style={detS.section}>
             <View style={detS.sectionHeader}>
               <Text style={detS.sectionTitle}>Payments</Text>
               <TouchableOpacity
                 style={[detS.addPayBtn, { backgroundColor: accentColor }]}
-                onPress={() => setShowAddPay(s => !s)}
+                onPress={() => requireActive(() => setShowAddPay(s => !s))}
               >
                 <Feather name="plus" size={14} color="#fff" />
                 <Text style={detS.addPayText}>Add</Text>
@@ -544,8 +866,8 @@ function EmployeeDetailModal({
 
             {showAddPay && (
               <View style={detS.addPayForm}>
-                <Text style={detS.fieldLabel}>Date (YYYY-MM-DD)</Text>
-                <TextInput style={detS.fieldInput} value={payDate} onChangeText={setPayDate} placeholder="2026-06-01" placeholderTextColor="#bbb" maxLength={10} />
+                <Text style={detS.fieldLabel}>Date</Text>
+                <DateField value={payDate} onChange={setPayDate} placeholder={TODAY} style={detS.fieldInput} accentColor={accentColor} allowFuture={false} />
                 <Text style={detS.fieldLabel}>Amount (Ksh)</Text>
                 <TextInput style={detS.fieldInput} value={payAmount} onChangeText={setPayAmount} keyboardType="numeric" placeholder="0" placeholderTextColor="#bbb" maxLength={10} />
                 <Text style={detS.fieldLabel}>Note (optional)</Text>
@@ -606,6 +928,7 @@ const detS = StyleSheet.create({
   root:        { flex: 1, backgroundColor: '#f5f7f9' },
   header:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, backgroundColor: '#fff', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#eee' },
   headerTitle: { fontSize: 17, fontWeight: '700', color: '#1a1a1a' },
+  headerAction:{ fontSize: 15, fontWeight: '700', color: '#2d6a4f' },
   scroll:      { padding: 16, paddingBottom: 40 },
 
   profile:        { alignItems: 'center', marginBottom: 16 },
@@ -622,6 +945,18 @@ const detS = StyleSheet.create({
   infoLabel: { fontSize: 13, color: '#888', fontWeight: '500' },
   infoValue: { fontSize: 13, color: '#1a1a1a', fontWeight: '500', textAlign: 'right', flex: 1, marginLeft: 12 },
   noInfo:    { fontSize: 13, color: '#bbb', textAlign: 'center', paddingVertical: 8 },
+
+  genderRow:           { flexDirection: 'row', gap: 8, marginBottom: 14 },
+  genderBtn:           { flex: 1, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: '#ddd', alignItems: 'center', backgroundColor: '#fafafa' },
+  genderBtnActive:     { borderColor: '#2d6a4f', backgroundColor: '#e8f5ef' },
+  genderBtnText:       { fontSize: 14, fontWeight: '600', color: '#888' },
+  genderBtnTextActive: { color: '#2d6a4f' },
+
+  inactiveBanner:     { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fffbeb', borderRadius: 10, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: '#fde68a' },
+  inactiveBannerText: { flex: 1, fontSize: 12, color: '#92400e', fontWeight: '500' },
+
+  payEntryRow:  { flexDirection: 'row', gap: 10 },
+  payEntryHalf: { flex: 1 },
 
   statusRow:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: '#eee' },
   statusLabel:   { fontSize: 14, color: '#333', fontWeight: '500' },
@@ -655,159 +990,12 @@ const detS = StyleSheet.create({
   emptyPay:  { fontSize: 13, color: '#bbb', textAlign: 'center', paddingVertical: 16 },
 });
 
-// ─── Casual Payroll Report Modal ──────────────────────────────────────────────
-
-const MONTH_NAMES_LONG = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-
-function CasualPayrollModal({ visible, farmId, onClose }: { visible: boolean; farmId: number; onClose: () => void }) {
-  const now = new Date();
-  const [year,    setYear]    = useState(now.getFullYear());
-  const [month,   setMonth]   = useState(now.getMonth() + 1);
-  const [rows,    setRows]    = useState<CasualPayrollEntry[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [exporting, setExporting] = useState(false);
-  const [error,   setError]   = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!visible) return;
-    loadPayroll();
-  }, [visible, year, month, farmId]);
-
-  async function loadPayroll() {
-    setLoading(true); setError(null);
-    try { setRows(await getCasualPayroll(farmId, year, month)); }
-    catch (e: any) { setError(e.message ?? 'Failed to load.'); }
-    finally { setLoading(false); }
-  }
-
-  async function handleExport() {
-    setExporting(true);
-    try { await downloadAndShareMonthlyExcel(farmId, year, month); }
-    catch (e: any) { Alert.alert('Export failed', e.message ?? 'Could not generate file.'); }
-    finally { setExporting(false); }
-  }
-
-  const totalEarned      = rows.reduce((s, r) => s + Number(r.monthEarnings), 0);
-  const totalOutstanding = rows.reduce((s, r) => s + Number(r.outstanding), 0);
-
-  return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <SafeAreaView style={prS.root}>
-        <View style={prS.header}>
-          <TouchableOpacity onPress={onClose} hitSlop={8}><Feather name="x" size={22} color="#333" /></TouchableOpacity>
-          <Text style={prS.headerTitle}>Casual Labour Report</Text>
-          <TouchableOpacity style={[prS.exportBtn, exporting && { opacity: 0.5 }]} onPress={handleExport} disabled={exporting || loading} hitSlop={4}>
-            {exporting
-              ? <ActivityIndicator size="small" color="#2d6a4f" />
-              : <><Feather name="download" size={14} color="#2d6a4f" /><Text style={prS.exportBtnText}>Excel</Text></>}
-          </TouchableOpacity>
-        </View>
-
-        <View style={prS.monthRow}>
-          <TouchableOpacity onPress={() => { if (month === 1) { setMonth(12); setYear(y => y - 1); } else setMonth(m => m - 1); }} hitSlop={8}>
-            <Feather name="chevron-left" size={20} color="#2d6a4f" />
-          </TouchableOpacity>
-          <Text style={prS.monthLabel}>{MONTH_NAMES_LONG[month - 1]} {year}</Text>
-          <TouchableOpacity onPress={() => { if (month === 12) { setMonth(1); setYear(y => y + 1); } else setMonth(m => m + 1); }} hitSlop={8}>
-            <Feather name="chevron-right" size={20} color="#2d6a4f" />
-          </TouchableOpacity>
-        </View>
-
-        {loading ? (
-          <View style={prS.centered}><ActivityIndicator size="large" color="#2d6a4f" /></View>
-        ) : error ? (
-          <View style={prS.centered}>
-            <Feather name="alert-triangle" size={32} color="#e53e3e" />
-            <Text style={prS.errorText}>{error}</Text>
-            <TouchableOpacity style={prS.retryBtn} onPress={loadPayroll}><Text style={prS.retryText}>Retry</Text></TouchableOpacity>
-          </View>
-        ) : (
-          <>
-            <View style={prS.summaryStrip}>
-              {[
-                { val: rows.length,     lbl: 'Labourers',      color: '#1a1a1a' },
-                { val: `Ksh ${totalEarned.toLocaleString()}`,      lbl: 'Month Earnings', color: '#2d6a4f' },
-                { val: `Ksh ${totalOutstanding.toLocaleString()}`, lbl: 'Outstanding',    color: totalOutstanding > 0 ? '#b45309' : '#2d6a4f' },
-              ].map(({ val, lbl, color }, i) => (
-                <View key={lbl} style={{ flex: 1 }}>
-                  {i > 0 && <View style={{ position: 'absolute', left: 0, top: 4, bottom: 4, width: 1, backgroundColor: '#eee' }} />}
-                  <View style={prS.summaryItem}>
-                    <Text style={[prS.summaryVal, { color }]}>{String(val)}</Text>
-                    <Text style={prS.summaryLbl}>{lbl}</Text>
-                  </View>
-                </View>
-              ))}
-            </View>
-
-            {rows.length === 0 ? (
-              <View style={prS.centered}><Feather name="user-check" size={44} color="#ccc" /><Text style={prS.emptyText}>No casual labourers for this period.</Text></View>
-            ) : (
-              <ScrollView contentContainerStyle={{ paddingBottom: 24 }}>
-                <View style={prS.colHeader}>
-                  {['Labourer','Days','Earned','Paid','Balance'].map((h, i) => (
-                    <Text key={h} style={[prS.colHdr, i === 0 ? { flex: 2 } : { width: 75, textAlign: i === 1 ? 'center' : 'right' }]}>{h}</Text>
-                  ))}
-                </View>
-                {rows.map(r => {
-                  const photoUri = r.photoBase64 ? `data:${r.photoMimeType ?? 'image/jpeg'};base64,${r.photoBase64}` : null;
-                  return (
-                    <View key={r.labourerId} style={prS.row}>
-                      <View style={prS.avatar}>
-                        {photoUri
-                          ? <Image source={{ uri: photoUri }} style={prS.avatarImg} />
-                          : <Text style={prS.avatarInitials}>{r.name.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)}</Text>}
-                      </View>
-                      <View style={{ flex: 2, marginRight: 4 }}>
-                        <Text style={prS.rowName} numberOfLines={1}>{r.name}</Text>
-                      </View>
-                      <Text style={[prS.rowNum, { width: 75, textAlign: 'center' }]}>{r.daysPresent}</Text>
-                      <Text style={[prS.rowNum, { width: 75, textAlign: 'right' }]}>{Number(r.monthEarnings).toLocaleString()}</Text>
-                      <Text style={[prS.rowNum, { width: 75, textAlign: 'right', color: '#2d6a4f' }]}>{Number(r.allTimePaid).toLocaleString()}</Text>
-                      <Text style={[prS.rowNum, { width: 75, textAlign: 'right', fontWeight: '700', color: Number(r.outstanding) > 0 ? '#b45309' : '#2d6a4f' }]}>{Number(r.outstanding).toLocaleString()}</Text>
-                    </View>
-                  );
-                })}
-              </ScrollView>
-            )}
-          </>
-        )}
-      </SafeAreaView>
-    </Modal>
-  );
-}
-
-const prS = StyleSheet.create({
-  root:         { flex: 1, backgroundColor: '#f5f7f9' },
-  header:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, backgroundColor: '#fff', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#eee' },
-  headerTitle:  { fontSize: 17, fontWeight: '700', color: '#1a1a1a' },
-  exportBtn:    { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: '#2d6a4f', backgroundColor: '#e8f5ef' },
-  exportBtnText:{ fontSize: 13, fontWeight: '700', color: '#2d6a4f' },
-  monthRow:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, backgroundColor: '#fff', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#eee', gap: 16 },
-  monthLabel:   { fontSize: 16, fontWeight: '700', color: '#1a1a1a', minWidth: 160, textAlign: 'center' },
-  summaryStrip: { flexDirection: 'row', backgroundColor: '#fff', marginVertical: 10, marginHorizontal: 12, borderRadius: 12, paddingVertical: 14, elevation: 2 },
-  summaryItem:  { alignItems: 'center' },
-  summaryVal:   { fontSize: 15, fontWeight: '800' },
-  summaryLbl:   { fontSize: 10, color: '#888', marginTop: 2 },
-  colHeader:    { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, backgroundColor: '#eef2f0', marginHorizontal: 12, borderRadius: 8, marginBottom: 4 },
-  colHdr:       { fontSize: 10, fontWeight: '700', color: '#555', textTransform: 'uppercase', letterSpacing: 0.5 },
-  row:          { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', marginHorizontal: 12, marginBottom: 1, paddingHorizontal: 10, paddingVertical: 12, borderRadius: 8 },
-  avatar:       { width: 36, height: 36, borderRadius: 18, backgroundColor: '#ede9fe', alignItems: 'center', justifyContent: 'center', marginRight: 8, overflow: 'hidden' },
-  avatarImg:    { width: 36, height: 36, borderRadius: 18 },
-  avatarInitials:{ fontSize: 13, fontWeight: '800', color: '#7c3aed' },
-  rowName:      { fontSize: 14, fontWeight: '600', color: '#1a1a1a' },
-  rowNum:       { fontSize: 13, color: '#1a1a1a' },
-  centered:     { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  errorText:    { marginTop: 12, color: '#e53e3e', textAlign: 'center', fontSize: 14 },
-  retryBtn:     { marginTop: 16, paddingHorizontal: 24, paddingVertical: 10, backgroundColor: '#2d6a4f', borderRadius: 8 },
-  retryText:    { color: '#fff', fontWeight: '600', fontSize: 14 },
-  emptyText:    { fontSize: 14, color: '#aaa', marginTop: 14, textAlign: 'center' },
-});
-
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function WorkersScreen() {
   const { user }  = useAuth();
   const route     = useRoute();
+  const navigation = useNavigation<NativeStackNavigationProp<AttendanceStackParamList>>();
   const routeParams = route.params as { farmId?: number } | undefined;
   const farmId    = routeParams?.farmId ?? user?.farmId!;
 
@@ -817,7 +1005,6 @@ export default function WorkersScreen() {
   const [search,     setSearch]     = useState('');
 
   const [showAdd,    setShowAdd]    = useState(false);
-  const [showPayrollReport, setShowPayrollReport] = useState(false);
   const [detailEmployee,    setDetailEmployee]    = useState<EmployeeDto | null>(null);
 
   const load = useCallback(async () => {
@@ -866,6 +1053,12 @@ export default function WorkersScreen() {
                 lastName: employee.lastName,
                 phone: employee.phone,
                 employmentType: employee.employmentType,
+                jobTitle: employee.jobTitle,
+                nationalId: employee.nationalId,
+                gender: employee.gender,
+                dateOfBirth: employee.dateOfBirth,
+                startDate: employee.startDate,
+                defaultDailyRate: employee.defaultDailyRate,
                 status: 'INACTIVE',
               });
               await load();
@@ -901,10 +1094,10 @@ export default function WorkersScreen() {
       {/* Toolbar */}
       <View style={styles.toolbar}>
         <Text style={styles.count}>{employees.length} employee{employees.length !== 1 ? 's' : ''}</Text>
-        {casualCount > 0 && (
-          <TouchableOpacity style={styles.reportBtn} onPress={() => setShowPayrollReport(true)} activeOpacity={0.8}>
-            <Feather name="bar-chart-2" size={14} color="#2d6a4f" />
-            <Text style={styles.reportBtnText}>Casual Report</Text>
+        {!routeParams?.farmId && casualCount > 0 && (
+          <TouchableOpacity style={styles.reportBtn} onPress={() => navigation.navigate('CasualHome')} activeOpacity={0.8}>
+            <Feather name="calendar" size={14} color="#2d6a4f" />
+            <Text style={styles.reportBtnText}>Work Sessions</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -954,8 +1147,6 @@ export default function WorkersScreen() {
         onClose={() => setDetailEmployee(null)}
         onRefresh={load}
       />
-
-      <CasualPayrollModal visible={showPayrollReport} farmId={farmId} onClose={() => setShowPayrollReport(false)} />
     </View>
   );
 }
