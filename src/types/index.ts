@@ -195,6 +195,22 @@ export interface EmployeeSummaryDto {
   payments: EmployeePaymentDto[];
 }
 
+export interface EmployeeLedgerMonthDto {
+  month: number;
+  earned: number;
+  paid: number;
+  balance: number;
+}
+
+export interface EmployeeLedgerDto {
+  year: number;
+  openingBalance: number;
+  totalEarned: number;
+  totalPaid: number;
+  closingBalance: number;
+  months: EmployeeLedgerMonthDto[];
+}
+
 export interface PayrollEntryRequest {
   employeeId: number;
   salaryRate: number | null;

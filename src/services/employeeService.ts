@@ -1,6 +1,7 @@
 import apiClient from './apiClient';
 import {
   EmployeeDto,
+  EmployeeLedgerDto,
   EmployeePaymentDto,
   EmployeeRequest,
   EmployeeSummaryDto,
@@ -35,6 +36,11 @@ export async function updateEmployee(farmId: number, id: number, request: Employ
 
 export async function getEmployeeSummary(farmId: number, id: number): Promise<EmployeeSummaryDto> {
   const res = await apiClient.get(`/farms/${farmId}/employees/${id}/summary`);
+  return res.data.data;
+}
+
+export async function getEmployeeLedger(farmId: number, id: number, year: number): Promise<EmployeeLedgerDto> {
+  const res = await apiClient.get(`/farms/${farmId}/employees/${id}/ledger`, { params: { year } });
   return res.data.data;
 }
 

@@ -21,9 +21,11 @@ import {
 } from 'react-native';
 import DateField from '../components/shared/DateField';
 import MonthYearSelector from '../components/shared/MonthYearSelector';
+import YearSelector from '../components/shared/YearSelector';
 import {
   createEmployee,
   deleteEmployeePayment,
+  getEmployeeLedger,
   getEmployeeSummary,
   getEmployees,
   recordEmployeePayment,
@@ -40,12 +42,14 @@ import {
   AttendanceStackParamList,
   CasualLabourerSummaryDto,
   EmployeeDto,
+  EmployeeLedgerDto,
   EmployeePaymentDto,
   EmployeeSummaryDto,
   PayrollRecord,
 } from '../types';
 
 const TODAY = new Date().toISOString().slice(0, 10);
+const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 // LS numbers carry a trailing farm letter (e.g. LS2032B) for the database/master
 // registry, but the client doesn't want that letter shown in the app.
@@ -377,6 +381,11 @@ function EmployeeDetailModal({
   const [loadingPayRecord, setLoadingPayRecord] = useState(false);
   const [payEntrySaveState, setPayEntrySaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
 
+  // Annual ledger (salaried only)
+  const [ledgerYear, setLedgerYear] = useState(now.getFullYear());
+  const [ledger, setLedger] = useState<EmployeeLedgerDto | null>(null);
+  const [loadingLedger, setLoadingLedger] = useState(false);
+
   useEffect(() => {
     if (!visible || !employee) return;
     loadData();
@@ -391,6 +400,11 @@ function EmployeeDetailModal({
     loadPayRecord();
   }, [visible, employee?.id, isSalaried, payYear, payMonth]);
 
+  useEffect(() => {
+    if (!visible || !employee || !isSalaried) return;
+    loadLedger();
+  }, [visible, employee?.id, isSalaried, ledgerYear]);
+
   async function loadPayRecord() {
     if (!employee) return;
     setLoadingPayRecord(true);
@@ -399,12 +413,27 @@ function EmployeeDetailModal({
       const record = rows.find(r => r.employeeId === employee.id) ?? null;
       setPayRecord(record);
       setPayDraft(record ? { ...record } : {});
-      setBaseRemaining(record?.amountRemaining ?? 0);
+      // baseRemaining is the balance carried in from BEFORE this month — derive it by
+      // reversing this month's own earned/paid out of its already-stored amountRemaining,
+      // rather than reusing that stored value directly (which double-counts on re-edit).
+      setBaseRemaining((record?.amountRemaining ?? 0) - (record?.grossSalary ?? 0) + (record?.amountPaid ?? 0));
     } catch {
       setPayRecord(null);
       setPayDraft({});
     } finally {
       setLoadingPayRecord(false);
+    }
+  }
+
+  async function loadLedger() {
+    if (!employee) return;
+    setLoadingLedger(true);
+    try {
+      setLedger(await getEmployeeLedger(farmId, employee.id, ledgerYear));
+    } catch {
+      setLedger(null);
+    } finally {
+      setLoadingLedger(false);
     }
   }
 
@@ -851,6 +880,56 @@ function EmployeeDetailModal({
             </View>
           )}
 
+          {/* Annual Ledger — salaried only */}
+          {isSalaried && (
+            <View style={detS.section}>
+              <View style={detS.sectionHeader}>
+                <Text style={detS.sectionTitle}>Annual Ledger</Text>
+                {loadingLedger && <ActivityIndicator size="small" color={accentColor} />}
+              </View>
+              <YearSelector year={ledgerYear} onChange={setLedgerYear} />
+
+              {!loadingLedger && ledger && (
+                <View style={{ marginTop: 14 }}>
+                  <View style={detS.cards}>
+                    {[
+                      { label: 'Opening', value: ledger.openingBalance, color: '#F1F5F9' },
+                      { label: 'Earned',  value: ledger.totalEarned,    color: '#D8F3DC' },
+                      { label: 'Paid',    value: ledger.totalPaid,      color: '#DBEAFE' },
+                      { label: 'Closing', value: ledger.closingBalance, color: '#EDE9FE' },
+                    ].map(({ label, value, color }) => (
+                      <View key={label} style={[detS.card, { backgroundColor: color }]}>
+                        <Text style={detS.cardLabel}>{label}</Text>
+                        <Text style={detS.cardValue}>Ksh {Number(value).toLocaleString()}</Text>
+                      </View>
+                    ))}
+                  </View>
+
+                  <View style={detS.ledgerTable}>
+                    <View style={detS.ledgerHeaderRow}>
+                      <Text style={[detS.ledgerCell, detS.ledgerMonthCell, detS.ledgerHeaderText]}>Month</Text>
+                      <Text style={[detS.ledgerCell, detS.ledgerHeaderText]}>Earned</Text>
+                      <Text style={[detS.ledgerCell, detS.ledgerHeaderText]}>Paid</Text>
+                      <Text style={[detS.ledgerCell, detS.ledgerHeaderText]}>Balance</Text>
+                    </View>
+                    {ledger.months.map(m => (
+                      <View key={m.month} style={detS.ledgerRow}>
+                        <Text style={[detS.ledgerCell, detS.ledgerMonthCell]}>{MONTH_ABBR[m.month - 1]}</Text>
+                        <Text style={detS.ledgerCell}>{Number(m.earned).toLocaleString()}</Text>
+                        <Text style={detS.ledgerCell}>{Number(m.paid).toLocaleString()}</Text>
+                        <Text style={[detS.ledgerCell, { fontWeight: '700' }]}>{Number(m.balance).toLocaleString()}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              {!loadingLedger && !ledger && (
+                <Text style={detS.noInfo}>No ledger data available.</Text>
+              )}
+            </View>
+          )}
+
           {/* Payments section */}
           <View style={detS.section}>
             <View style={detS.sectionHeader}>
@@ -988,6 +1067,13 @@ const detS = StyleSheet.create({
   payBy:     { fontSize: 11, color: '#bbb', marginTop: 1 },
   payAmt:    { fontSize: 15, fontWeight: '700' },
   emptyPay:  { fontSize: 13, color: '#bbb', textAlign: 'center', paddingVertical: 16 },
+
+  ledgerTable:      { borderWidth: 1, borderColor: '#eee', borderRadius: 8, overflow: 'hidden' },
+  ledgerHeaderRow:  { flexDirection: 'row', backgroundColor: '#f9f9f9', paddingVertical: 8, paddingHorizontal: 10 },
+  ledgerRow:        { flexDirection: 'row', paddingVertical: 8, paddingHorizontal: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#f0f0f0' },
+  ledgerCell:       { flex: 1, fontSize: 12, color: '#1a1a1a', textAlign: 'right' },
+  ledgerMonthCell:  { textAlign: 'left', fontWeight: '600' },
+  ledgerHeaderText: { fontWeight: '700', color: '#555', fontSize: 11 },
 });
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
