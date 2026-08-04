@@ -9,7 +9,6 @@ import AuditLogScreen from '../screens/AuditLogScreen';
 import CasualAttendanceScreen from '../screens/CasualAttendanceScreen';
 import CreateWorkSessionScreen from '../screens/CreateWorkSessionScreen';
 import SelectCasualsScreen from '../screens/SelectCasualsScreen';
-import CasualReportScreen from '../screens/CasualReportScreen';
 import ExpensesScreen from '../screens/expenses/ExpensesScreen';
 import LivestockScreen from '../screens/livestock/LivestockScreen';
 import MilkScreen from '../screens/milk/MilkScreen';
@@ -95,11 +94,6 @@ function AttendanceNavigator() {
         component={SelectCasualsScreen}
         options={{ headerShown: true, title: 'Choose Casuals', headerTitleStyle: { fontWeight: '600', fontSize: 17 }, headerTintColor: '#7c3aed' }}
       />
-      <AttendanceStack.Screen
-        name="CasualReport"
-        component={CasualReportScreen}
-        options={{ headerShown: true, title: 'Casual Report', headerTitleStyle: { fontWeight: '600', fontSize: 17 }, headerTintColor: '#7c3aed' }}
-      />
     </AttendanceStack.Navigator>
   );
 }
@@ -131,7 +125,6 @@ function ExpensesNavigator() {
 export default function MainNavigator() {
   const { user } = useAuth();
   const isAdmin      = user?.role === 'ADMIN';
-  const isManager    = user?.role === 'MANAGER';
   const isOpsManager = user?.role === 'OPERATIONS_MANAGER';
   const showFarmTabs = !isAdmin && !isOpsManager;
 
@@ -165,7 +158,7 @@ export default function MainNavigator() {
             Livestock:  'tag',
             Milk:       'droplet',
             Expenses:   'dollar-sign',
-            Admin:      isOpsManager ? 'dollar-sign' : isManager ? 'clipboard' : 'grid',
+            Admin:      isOpsManager ? 'dollar-sign' : 'grid',
             Settings:   'settings',
           };
           return <Feather name={icons[route.name] ?? 'circle'} size={size} color={color} />;
@@ -176,13 +169,13 @@ export default function MainNavigator() {
       {showFarmTabs && <Tab.Screen name="Livestock"  component={LivestockNavigator} />}
       {showFarmTabs && <Tab.Screen name="Milk"       component={MilkNavigator} />}
       {showFarmTabs && <Tab.Screen name="Expenses"   component={ExpensesNavigator} />}
-      {(isAdmin || isManager || isOpsManager) && (
+      {(isAdmin || isOpsManager) && (
         <Tab.Screen
           name="Admin"
           component={AdminNavigator}
           options={{
             headerShown: false,
-            tabBarLabel: isOpsManager ? 'Farms' : isManager ? 'My Report' : 'Admin',
+            tabBarLabel: isOpsManager ? 'Farms' : 'Admin',
           }}
         />
       )}

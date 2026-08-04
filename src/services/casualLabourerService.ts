@@ -10,6 +10,7 @@ import {
   CasualPayrollEntry,
   CasualWorkSessionDto,
   CreateWorkSessionRequest,
+  EmployeeLedgerDto,
 } from '../types';
 import apiClient from './apiClient';
 
@@ -171,6 +172,19 @@ export async function getCasualLabourerSummary(
 ): Promise<CasualLabourerSummaryDto> {
   const res = await apiClient.get(`/farms/${farmId}/casual-labourers/${labourerId}/summary`);
   return res.data.data as CasualLabourerSummaryDto;
+}
+
+// ── Annual ledger ───────────────────────────────────────────────────────────
+
+export async function getCasualLabourerLedger(
+  farmId: number,
+  labourerId: number,
+  year: number,
+): Promise<EmployeeLedgerDto> {
+  const res = await apiClient.get(`/farms/${farmId}/casual-labourers/${labourerId}/ledger`, {
+    params: { year },
+  });
+  return res.data.data as EmployeeLedgerDto;
 }
 
 // ── Payments ──────────────────────────────────────────────────────────────────

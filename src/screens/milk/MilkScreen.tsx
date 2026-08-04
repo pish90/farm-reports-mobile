@@ -14,8 +14,6 @@ import {
   View,
 } from 'react-native';
 import MilkRow, { MilkFormValues, ROW_HEIGHT } from '../../components/milk/MilkRow';
-
-const WEEK_TOTAL_HEIGHT = 36;
 import MonthYearSelector from '../../components/shared/MonthYearSelector';
 import { getDb } from '../../db/database';
 import {
@@ -172,28 +170,6 @@ export default function MilkScreen() {
     [daysInMonth],
   );
 
-  type ListItem =
-    | { type: 'day'; day: number }
-    | { type: 'week-total'; weekDays: number[]; weekNum: number };
-
-  const listItems = useMemo((): ListItem[] => {
-    const items: ListItem[] = [];
-    let weekDays: number[] = [];
-    let weekNum = 1;
-    for (const day of days) {
-      weekDays.push(day);
-      const dow = new Date(year, month - 1, day).getDay();
-      const isLastDay = day === daysInMonth;
-      if (dow === 6 || isLastDay) {
-        items.push(...weekDays.map((d) => ({ type: 'day' as const, day: d })));
-        items.push({ type: 'week-total', weekDays: [...weekDays], weekNum });
-        weekNum++;
-        weekDays = [];
-      }
-    }
-    return items;
-  }, [days, year, month, daysInMonth]);
-
   const { control, reset, formState: { errors } } = useForm<MilkFormValues>({
     defaultValues: {},
     mode: 'onChange',
@@ -317,42 +293,21 @@ export default function MilkScreen() {
 
   // ── Render helpers ──────────────────────────────────────────────────────
   const renderItem = useCallback(
-    ({ item }: { item: ListItem }) => {
-      if (item.type === 'week-total') {
-        const weekTotal = item.weekDays.reduce(
-          (sum, d) => sum + parseLitres(watchedValues[`day_${d}`]),
-          0,
-        );
-        return (
-          <View style={weekTotalStyles.row}>
-            <Text style={weekTotalStyles.label}>Week {item.weekNum} total</Text>
-            <Text style={weekTotalStyles.value}>{fmt(weekTotal)} L</Text>
-          </View>
-        );
-      }
-      return (
-        <MilkRow
-          day={item.day}
-          month={month}
-          year={year}
-          control={control}
-          isSubmitted={isSubmitted}
-        />
-      );
-    },
-    [control, month, year, isSubmitted, watchedValues],
+    ({ item: day }: { item: number }) => (
+      <MilkRow
+        day={day}
+        month={month}
+        year={year}
+        control={control}
+        isSubmitted={isSubmitted}
+      />
+    ),
+    [control, month, year, isSubmitted],
   );
 
   const getItemLayout = useCallback(
-    (_: unknown, index: number) => {
-      const item = listItems[index];
-      const height = item?.type === 'week-total' ? WEEK_TOTAL_HEIGHT : ROW_HEIGHT;
-      const offset = listItems
-        .slice(0, index)
-        .reduce((sum, it) => sum + (it.type === 'week-total' ? WEEK_TOTAL_HEIGHT : ROW_HEIGHT), 0);
-      return { length: height, offset, index };
-    },
-    [listItems],
+    (_: unknown, index: number) => ({ length: ROW_HEIGHT, offset: ROW_HEIGHT * index, index }),
+    [],
   );
 
   function handlePriceChange(price: number) {
@@ -422,9 +377,9 @@ export default function MilkScreen() {
         </View>
       ) : (
         <FlatList
-          data={listItems}
+          data={days}
           renderItem={renderItem}
-          keyExtractor={(item) => item.type === 'week-total' ? `week-${item.weekNum}` : `day-${item.day}`}
+          keyExtractor={(day) => `day-${day}`}
           getItemLayout={getItemLayout}
           initialNumToRender={38}
           maxToRenderPerBatch={38}
@@ -438,21 +393,6 @@ export default function MilkScreen() {
     </KeyboardAvoidingView>
   );
 }
-
-const weekTotalStyles = StyleSheet.create({
-  row: {
-    height: WEEK_TOTAL_HEIGHT,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    backgroundColor: '#e8f5e9',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#c8e6c9',
-  },
-  label: { fontSize: 13, fontWeight: '600', color: '#2d6a4f' },
-  value: { fontSize: 13, fontWeight: '700', color: '#2d6a4f', fontVariant: ['tabular-nums'] },
-});
 
 const styles = StyleSheet.create({
   container:       { flex: 1, backgroundColor: '#f5f7f9' },

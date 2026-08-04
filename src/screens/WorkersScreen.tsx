@@ -20,11 +20,9 @@ import {
   View,
 } from 'react-native';
 import DateField from '../components/shared/DateField';
-import MonthYearSelector from '../components/shared/MonthYearSelector';
 import YearSelector from '../components/shared/YearSelector';
 import {
   createEmployee,
-  deleteEmployeePayment,
   getEmployeeLedger,
   getEmployeeSummary,
   getEmployees,
@@ -32,7 +30,7 @@ import {
   updateEmployee,
 } from '../services/employeeService';
 import {
-  deletePayment,
+  getCasualLabourerLedger,
   getCasualLabourerSummary,
   recordPayment,
 } from '../services/casualLabourerService';
@@ -43,9 +41,8 @@ import {
   CasualLabourerSummaryDto,
   EmployeeDto,
   EmployeeLedgerDto,
-  EmployeePaymentDto,
+  EmployeeLedgerMonthDto,
   EmployeeSummaryDto,
-  PayrollRecord,
 } from '../types';
 
 const TODAY = new Date().toISOString().slice(0, 10);
@@ -349,11 +346,6 @@ function EmployeeDetailModal({
 
   const [summary,      setSummary]      = useState<EmployeeSummaryDto | CasualLabourerSummaryDto | null>(null);
   const [loadingSum,   setLoadingSum]   = useState(false);
-  const [showAddPay,   setShowAddPay]   = useState(false);
-  const [payDate,      setPayDate]      = useState(TODAY);
-  const [payAmount,    setPayAmount]    = useState('');
-  const [payNote,      setPayNote]      = useState('');
-  const [payLoading,   setPayLoading]   = useState(false);
 
   // Status toggle
   const [togglingStatus, setTogglingStatus] = useState(false);
@@ -371,20 +363,18 @@ function EmployeeDetailModal({
   const [efJobTitle, setEfJobTitle] = useState('');
   const [efRate,     setEfRate]     = useState('');
 
-  // Monthly payroll entry (salaried only)
   const now = new Date();
-  const [payYear,  setPayYear]  = useState(now.getFullYear());
-  const [payMonth, setPayMonth] = useState(now.getMonth() + 1);
-  const [payRecord,  setPayRecord]  = useState<PayrollRecord | null>(null);
-  const [payDraft,   setPayDraft]   = useState<Partial<PayrollRecord>>({});
-  const [baseRemaining, setBaseRemaining] = useState(0);
-  const [loadingPayRecord, setLoadingPayRecord] = useState(false);
-  const [payEntrySaveState, setPayEntrySaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
 
-  // Annual ledger (salaried only)
+  // Annual ledger
   const [ledgerYear, setLedgerYear] = useState(now.getFullYear());
   const [ledger, setLedger] = useState<EmployeeLedgerDto | null>(null);
   const [loadingLedger, setLoadingLedger] = useState(false);
+
+  // Ledger row inline edit
+  const [editingMonth, setEditingMonth] = useState<number | null>(null);
+  const [rowEarned, setRowEarned] = useState('');
+  const [rowPaid, setRowPaid] = useState('');
+  const [savingRow, setSavingRow] = useState(false);
 
   useEffect(() => {
     if (!visible || !employee) return;
@@ -392,44 +382,24 @@ function EmployeeDetailModal({
   }, [visible, employee?.id]);
 
   useEffect(() => {
-    if (!visible) setIsEditing(false);
+    if (!visible) {
+      setIsEditing(false);
+      setEditingMonth(null);
+    }
   }, [visible]);
 
   useEffect(() => {
-    if (!visible || !employee || !isSalaried) return;
-    loadPayRecord();
-  }, [visible, employee?.id, isSalaried, payYear, payMonth]);
-
-  useEffect(() => {
-    if (!visible || !employee || !isSalaried) return;
+    if (!visible || !employee) return;
     loadLedger();
-  }, [visible, employee?.id, isSalaried, ledgerYear]);
-
-  async function loadPayRecord() {
-    if (!employee) return;
-    setLoadingPayRecord(true);
-    try {
-      const rows = await getPayroll(farmId, payYear, payMonth);
-      const record = rows.find(r => r.employeeId === employee.id) ?? null;
-      setPayRecord(record);
-      setPayDraft(record ? { ...record } : {});
-      // baseRemaining is the balance carried in from BEFORE this month — derive it by
-      // reversing this month's own earned/paid out of its already-stored amountRemaining,
-      // rather than reusing that stored value directly (which double-counts on re-edit).
-      setBaseRemaining((record?.amountRemaining ?? 0) - (record?.grossSalary ?? 0) + (record?.amountPaid ?? 0));
-    } catch {
-      setPayRecord(null);
-      setPayDraft({});
-    } finally {
-      setLoadingPayRecord(false);
-    }
-  }
+  }, [visible, employee?.id, ledgerYear]);
 
   async function loadLedger() {
     if (!employee) return;
     setLoadingLedger(true);
     try {
-      setLedger(await getEmployeeLedger(farmId, employee.id, ledgerYear));
+      setLedger(isSalaried
+        ? await getEmployeeLedger(farmId, employee.id, ledgerYear)
+        : await getCasualLabourerLedger(farmId, employee.id, ledgerYear));
     } catch {
       setLedger(null);
     } finally {
@@ -437,40 +407,70 @@ function EmployeeDetailModal({
     }
   }
 
-  function setPayDraftField(field: keyof PayrollRecord, raw: string) {
-    const numericFields: Array<keyof PayrollRecord> = [
-      'salaryRate', 'daysWorked', 'grossSalary', 'loans', 'amountPaid', 'amountRemaining',
-    ];
-    setPayDraft(prev => {
-      const parsed = raw === '' ? null : parseFloat(raw.replace(/,/g, ''));
-      const updated = { ...prev, [field]: numericFields.includes(field) ? (isNaN(parsed as number) ? null : parsed) : (raw === '' ? null : raw) };
-      if (field === 'grossSalary' || field === 'amountPaid') {
-        const salary = field === 'grossSalary' ? parsed : (prev.grossSalary ?? 0);
-        const paid   = field === 'amountPaid'  ? parsed : (prev.amountPaid  ?? 0);
-        updated.amountRemaining = baseRemaining + (Number(salary) || 0) - (Number(paid) || 0);
-      }
-      return updated;
-    });
+  function lastDayOfMonthCapped(year: number, month: number): string {
+    const today = new Date();
+    if (year === today.getFullYear() && month === today.getMonth() + 1) return TODAY;
+    const lastDay = new Date(year, month, 0).getDate();
+    return `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
   }
 
-  async function handleSavePayEntry() {
-    if (!employee) return;
-    setPayEntrySaveState('saving');
+  function startEditRow(m: EmployeeLedgerMonthDto) {
+    setEditingMonth(m.month);
+    setRowEarned(String(m.earned));
+    setRowPaid(String(m.paid));
+  }
+
+  function cancelEditRow() {
+    setEditingMonth(null);
+  }
+
+  async function handleSaveRow() {
+    if (!employee || editingMonth == null || !ledger) return;
+    const monthData = ledger.months.find(mm => mm.month === editingMonth);
+    if (!monthData) return;
+    setSavingRow(true);
     try {
-      await saveEmployeePayrollEntry(farmId, payYear, payMonth, employee.id, {
-        employeeId: employee.id,
-        salaryRate: payDraft.salaryRate ?? null,
-        daysWorked: payDraft.daysWorked ?? null,
-        grossSalary: payDraft.grossSalary ?? null,
-        loans: payDraft.loans ?? 0,
-        amountPaid: payDraft.amountPaid ?? 0,
-        amountRemaining: payDraft.amountRemaining ?? null,
-        notes: payDraft.notes ?? null,
-      });
-      setPayEntrySaveState('saved');
-      setTimeout(() => setPayEntrySaveState('idle'), 2000);
-    } catch {
-      setPayEntrySaveState('error');
+      const newEarned = parseFloat(rowEarned.replace(/,/g, '')) || 0;
+      const newPaid = parseFloat(rowPaid.replace(/,/g, '')) || 0;
+
+      if (isSalaried) {
+        const existingRows = await getPayroll(farmId, ledgerYear, editingMonth);
+        const existing = existingRows.find(r => r.employeeId === employee.id);
+        const newRemaining = (existing?.amountRemaining ?? 0) - (existing?.grossSalary ?? 0) + newEarned;
+        await saveEmployeePayrollEntry(farmId, ledgerYear, editingMonth, employee.id, {
+          employeeId: employee.id,
+          salaryRate: existing?.salaryRate ?? null,
+          daysWorked: existing?.daysWorked ?? null,
+          grossSalary: newEarned,
+          loans: existing?.loans ?? 0,
+          amountPaid: existing?.amountPaid ?? 0,
+          amountRemaining: newRemaining,
+          notes: existing?.notes ?? null,
+        });
+      }
+
+      const delta = newPaid - monthData.paid;
+      if (delta > 0) {
+        const paymentDate = lastDayOfMonthCapped(ledgerYear, editingMonth);
+        if (isSalaried) {
+          await recordEmployeePayment(farmId, employee.id, { paymentDate, amount: delta, note: 'Ledger adjustment' });
+        } else {
+          await recordPayment(farmId, employee.id, { paymentDate, amount: delta, note: 'Ledger adjustment' });
+        }
+      } else if (delta < 0) {
+        Alert.alert(
+          'Cannot Reduce Paid Amount',
+          'Paid amounts can only be increased from here. To reduce a recorded payment, use the web console.',
+        );
+      }
+
+      setEditingMonth(null);
+      await loadLedger();
+      await loadData();
+    } catch (e: any) {
+      Alert.alert('Error', e.message ?? 'Failed to save.');
+    } finally {
+      setSavingRow(false);
     }
   }
 
@@ -544,49 +544,6 @@ function EmployeeDetailModal({
     }
   }
 
-  async function handleAddPayment() {
-    if (!employee) return;
-    const amt = parseFloat(payAmount);
-    if (isNaN(amt) || amt <= 0 || !payDate) return;
-    setPayLoading(true);
-    try {
-      if (isSalaried) {
-        await recordEmployeePayment(farmId, employee.id, { paymentDate: payDate, amount: amt, note: payNote.trim() || null });
-      } else {
-        await recordPayment(farmId, employee.id, { paymentDate: payDate, amount: amt, note: payNote.trim() || null });
-      }
-      setPayDate(TODAY); setPayAmount(''); setPayNote('');
-      setShowAddPay(false);
-      await loadData();
-    } catch (e: any) {
-      Alert.alert('Error', e.message ?? 'Failed to record payment.');
-    } finally {
-      setPayLoading(false);
-    }
-  }
-
-  async function handleDeletePayment(payId: number, amount: number, date: string) {
-    if (!employee) return;
-    Alert.alert('Delete Payment', `Remove payment of Ksh ${amount} on ${date}?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete', style: 'destructive',
-        onPress: async () => {
-          try {
-            if (isSalaried) {
-              await deleteEmployeePayment(farmId, employee.id, payId);
-            } else {
-              await deletePayment(farmId, employee.id, payId);
-            }
-            await loadData();
-          } catch (e: any) {
-            Alert.alert('Error', e.message ?? 'Failed to delete payment.');
-          }
-        },
-      },
-    ]);
-  }
-
   async function handleToggleStatus() {
     if (!employee) return;
     const newStatus = employee.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
@@ -620,7 +577,6 @@ function EmployeeDetailModal({
     ? `data:${employee.photoMimeType ?? 'image/jpeg'};base64,${employee.photoBase64}`
     : null;
 
-  const payments = summary?.payments ?? [];
   const earned   = summary?.allTimeEarned ?? 0;
   const paid     = summary?.allTimePaid ?? 0;
   const outstanding = summary?.outstanding ?? 0;
@@ -640,22 +596,30 @@ function EmployeeDetailModal({
                 {editSaving ? <ActivityIndicator size="small" color="#2d6a4f" /> : <Text style={detS.headerAction}>Save</Text>}
               </TouchableOpacity>
             )
-            : (
-              <TouchableOpacity onPress={() => requireActive(startEdit)} hitSlop={8} style={{ width: 44, alignItems: 'flex-end' }}>
-                <Feather name="edit-2" size={19} color="#2d6a4f" />
-              </TouchableOpacity>
-            )}
+            : <View style={{ width: 44 }} />}
         </View>
 
         <ScrollView contentContainerStyle={detS.scroll} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
-          {/* Profile */}
-          <View style={detS.profile}>
-            <View style={[detS.avatarWrap, { backgroundColor: isSalaried ? '#e8f5ef' : '#f3e8ff' }]}>
-              {photoUri
-                ? <Image source={{ uri: photoUri }} style={detS.avatar} />
-                : <Text style={[detS.initials, { color: accentColor }]}>
-                    {employee.fullName.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)}
-                  </Text>}
+          {/* Profile — tap avatar/name to edit */}
+          <TouchableOpacity
+            style={detS.profile}
+            activeOpacity={isEditing ? 1 : 0.7}
+            disabled={isEditing}
+            onPress={() => requireActive(startEdit)}
+          >
+            <View style={{ position: 'relative' }}>
+              <View style={[detS.avatarWrap, { backgroundColor: isSalaried ? '#e8f5ef' : '#f3e8ff' }]}>
+                {photoUri
+                  ? <Image source={{ uri: photoUri }} style={detS.avatar} />
+                  : <Text style={[detS.initials, { color: accentColor }]}>
+                      {employee.fullName.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)}
+                    </Text>}
+              </View>
+              {!isEditing && (
+                <View style={[detS.editBadge, { backgroundColor: accentColor }]}>
+                  <Feather name="edit-2" size={12} color="#fff" />
+                </View>
+              )}
             </View>
             <Text style={detS.name}>{employee.fullName}</Text>
             <View style={detS.badgeRow}>
@@ -666,7 +630,7 @@ function EmployeeDetailModal({
                 <Text style={[detS.badgeText, { color: '#888' }]}>{isSalaried ? 'Salaried' : 'Casual'}</Text>
               </View>
             </View>
-          </View>
+          </TouchableOpacity>
 
           {!isActive && (
             <View style={detS.inactiveBanner}>
@@ -748,8 +712,9 @@ function EmployeeDetailModal({
             </TouchableOpacity>
           </View>
 
-          {/* Summary cards */}
+          {/* Summary cards — leading spacer keeps these aligned with the ledger table's columns below */}
           <View style={detS.cards}>
+            <View style={{ flex: 1 }} />
             {[
               { label: 'All-time Earned', value: earned, color: '#D8F3DC' },
               { label: 'Total Paid',      value: paid,     color: '#DBEAFE' },
@@ -764,228 +729,71 @@ function EmployeeDetailModal({
             ))}
           </View>
 
-          {/* Monthly payroll entry — salaried only */}
-          {isSalaried && (
-            <View style={detS.section}>
-              <View style={detS.sectionHeader}>
-                <Text style={detS.sectionTitle}>Monthly Entry</Text>
-                {payEntrySaveState === 'saving' && <ActivityIndicator size="small" color={accentColor} />}
-                {payEntrySaveState === 'saved' && <Feather name="check-circle" size={16} color="#2d6a4f" />}
-                {payEntrySaveState === 'error' && <Feather name="alert-circle" size={16} color="#e53e3e" />}
-              </View>
-              <MonthYearSelector year={payYear} month={payMonth} onChange={(y, m) => { setPayYear(y); setPayMonth(m); }} />
-
-              {loadingPayRecord ? (
-                <ActivityIndicator size="small" color={accentColor} style={{ marginVertical: 16 }} />
-              ) : (
-                <View style={{ marginTop: 14 }}>
-                  <View style={detS.payEntryRow}>
-                    <View style={detS.payEntryHalf}>
-                      <Text style={detS.fieldLabel}>Days Worked</Text>
-                      <TextInput
-                        style={detS.fieldInput}
-                        editable={isActive}
-                        value={payDraft.daysWorked != null ? String(payDraft.daysWorked) : ''}
-                        onChangeText={t => setPayDraftField('daysWorked', t)}
-                        keyboardType="numeric"
-                        placeholder="0"
-                        placeholderTextColor="#bbb"
-                      />
-                    </View>
-                    <View style={detS.payEntryHalf}>
-                      <Text style={detS.fieldLabel}>Salary Rate</Text>
-                      <TextInput
-                        style={detS.fieldInput}
-                        editable={isActive}
-                        value={payDraft.salaryRate != null ? String(payDraft.salaryRate) : ''}
-                        onChangeText={t => setPayDraftField('salaryRate', t)}
-                        keyboardType="numeric"
-                        placeholder="0.00"
-                        placeholderTextColor="#bbb"
-                      />
-                    </View>
-                  </View>
-                  <View style={detS.payEntryRow}>
-                    <View style={detS.payEntryHalf}>
-                      <Text style={detS.fieldLabel}>Monthly Salary</Text>
-                      <TextInput
-                        style={detS.fieldInput}
-                        editable={isActive}
-                        value={payDraft.grossSalary != null ? String(payDraft.grossSalary) : ''}
-                        onChangeText={t => setPayDraftField('grossSalary', t)}
-                        keyboardType="numeric"
-                        placeholder="0.00"
-                        placeholderTextColor="#bbb"
-                      />
-                    </View>
-                    <View style={detS.payEntryHalf}>
-                      <Text style={detS.fieldLabel}>Loans</Text>
-                      <TextInput
-                        style={detS.fieldInput}
-                        editable={isActive}
-                        value={payDraft.loans != null ? String(payDraft.loans) : ''}
-                        onChangeText={t => setPayDraftField('loans', t)}
-                        keyboardType="numeric"
-                        placeholder="0.00"
-                        placeholderTextColor="#bbb"
-                      />
-                    </View>
-                  </View>
-                  <View style={detS.payEntryRow}>
-                    <View style={detS.payEntryHalf}>
-                      <Text style={detS.fieldLabel}>Amount Paid</Text>
-                      <TextInput
-                        style={detS.fieldInput}
-                        editable={isActive}
-                        value={payDraft.amountPaid != null ? String(payDraft.amountPaid) : ''}
-                        onChangeText={t => setPayDraftField('amountPaid', t)}
-                        keyboardType="numeric"
-                        placeholder="0.00"
-                        placeholderTextColor="#bbb"
-                      />
-                    </View>
-                    <View style={detS.payEntryHalf}>
-                      <Text style={detS.fieldLabel}>Amount Remaining</Text>
-                      <TextInput
-                        style={detS.fieldInput}
-                        editable={isActive}
-                        value={payDraft.amountRemaining != null ? String(payDraft.amountRemaining) : ''}
-                        onChangeText={t => setPayDraftField('amountRemaining', t)}
-                        keyboardType="numeric"
-                        placeholder="0.00"
-                        placeholderTextColor="#bbb"
-                      />
-                    </View>
-                  </View>
-                  <Text style={detS.fieldLabel}>Notes</Text>
-                  <TextInput
-                    style={[detS.fieldInput, { minHeight: 64, textAlignVertical: 'top' }]}
-                    editable={isActive}
-                    value={payDraft.notes ?? ''}
-                    onChangeText={t => setPayDraftField('notes', t)}
-                    placeholder="Optional notes…"
-                    placeholderTextColor="#bbb"
-                    multiline
-                    maxLength={500}
-                  />
-                  <TouchableOpacity
-                    style={[detS.savePayBtn, { backgroundColor: accentColor, alignSelf: 'flex-start', paddingHorizontal: 20 }, (!isActive || payEntrySaveState === 'saving') && { opacity: 0.5 }]}
-                    onPress={() => requireActive(handleSavePayEntry)}
-                    disabled={!isActive || payEntrySaveState === 'saving'}
-                  >
-                    <Text style={detS.savePayText}>Save Entry</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
-          )}
-
-          {/* Annual Ledger — salaried only */}
-          {isSalaried && (
-            <View style={detS.section}>
-              <View style={detS.sectionHeader}>
-                <Text style={detS.sectionTitle}>Annual Ledger</Text>
-                {loadingLedger && <ActivityIndicator size="small" color={accentColor} />}
-              </View>
-              <YearSelector year={ledgerYear} onChange={setLedgerYear} />
-
-              {!loadingLedger && ledger && (
-                <View style={{ marginTop: 14 }}>
-                  <View style={detS.cards}>
-                    {[
-                      { label: 'Opening', value: ledger.openingBalance, color: '#F1F5F9' },
-                      { label: 'Earned',  value: ledger.totalEarned,    color: '#D8F3DC' },
-                      { label: 'Paid',    value: ledger.totalPaid,      color: '#DBEAFE' },
-                      { label: 'Closing', value: ledger.closingBalance, color: '#EDE9FE' },
-                    ].map(({ label, value, color }) => (
-                      <View key={label} style={[detS.card, { backgroundColor: color }]}>
-                        <Text style={detS.cardLabel}>{label}</Text>
-                        <Text style={detS.cardValue}>Ksh {Number(value).toLocaleString()}</Text>
-                      </View>
-                    ))}
-                  </View>
-
-                  <View style={detS.ledgerTable}>
-                    <View style={detS.ledgerHeaderRow}>
-                      <Text style={[detS.ledgerCell, detS.ledgerMonthCell, detS.ledgerHeaderText]}>Month</Text>
-                      <Text style={[detS.ledgerCell, detS.ledgerHeaderText]}>Earned</Text>
-                      <Text style={[detS.ledgerCell, detS.ledgerHeaderText]}>Paid</Text>
-                      <Text style={[detS.ledgerCell, detS.ledgerHeaderText]}>Balance</Text>
-                    </View>
-                    {ledger.months.map(m => (
-                      <View key={m.month} style={detS.ledgerRow}>
-                        <Text style={[detS.ledgerCell, detS.ledgerMonthCell]}>{MONTH_ABBR[m.month - 1]}</Text>
-                        <Text style={detS.ledgerCell}>{Number(m.earned).toLocaleString()}</Text>
-                        <Text style={detS.ledgerCell}>{Number(m.paid).toLocaleString()}</Text>
-                        <Text style={[detS.ledgerCell, { fontWeight: '700' }]}>{Number(m.balance).toLocaleString()}</Text>
-                      </View>
-                    ))}
-                  </View>
-                </View>
-              )}
-
-              {!loadingLedger && !ledger && (
-                <Text style={detS.noInfo}>No ledger data available.</Text>
-              )}
-            </View>
-          )}
-
-          {/* Payments section */}
+          {/* Annual Ledger — tap a month to edit; casual Earned is read-only (computed from work sessions) */}
           <View style={detS.section}>
             <View style={detS.sectionHeader}>
-              <Text style={detS.sectionTitle}>Payments</Text>
-              <TouchableOpacity
-                style={[detS.addPayBtn, { backgroundColor: accentColor }]}
-                onPress={() => requireActive(() => setShowAddPay(s => !s))}
-              >
-                <Feather name="plus" size={14} color="#fff" />
-                <Text style={detS.addPayText}>Add</Text>
-              </TouchableOpacity>
+              <Text style={detS.sectionTitle}>Annual Ledger</Text>
+              {loadingLedger && <ActivityIndicator size="small" color={accentColor} />}
             </View>
+            <YearSelector year={ledgerYear} onChange={setLedgerYear} />
 
-            {showAddPay && (
-              <View style={detS.addPayForm}>
-                <Text style={detS.fieldLabel}>Date</Text>
-                <DateField value={payDate} onChange={setPayDate} placeholder={TODAY} style={detS.fieldInput} accentColor={accentColor} allowFuture={false} />
-                <Text style={detS.fieldLabel}>Amount (Ksh)</Text>
-                <TextInput style={detS.fieldInput} value={payAmount} onChangeText={setPayAmount} keyboardType="numeric" placeholder="0" placeholderTextColor="#bbb" maxLength={10} />
-                <Text style={detS.fieldLabel}>Note (optional)</Text>
-                <TextInput style={detS.fieldInput} value={payNote} onChangeText={setPayNote} placeholder="Week 1 wages, Advance…" placeholderTextColor="#bbb" maxLength={200} />
-                <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
-                  <TouchableOpacity style={detS.cancelSmBtn} onPress={() => setShowAddPay(false)}>
-                    <Text style={detS.cancelSmText}>Cancel</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[detS.savePayBtn, { backgroundColor: accentColor }, (parseFloat(payAmount) <= 0 || !payDate || payLoading) && { opacity: 0.5 }]}
-                    onPress={handleAddPayment}
-                    disabled={parseFloat(payAmount) <= 0 || !payDate || payLoading}
-                  >
-                    {payLoading
-                      ? <ActivityIndicator size="small" color="#fff" />
-                      : <Text style={detS.savePayText}>Save Payment</Text>}
-                  </TouchableOpacity>
+            {!loadingLedger && ledger && (
+              <View style={detS.ledgerTable}>
+                <View style={detS.ledgerHeaderRow}>
+                  <Text style={[detS.ledgerCell, detS.ledgerMonthCell, detS.ledgerHeaderText]}>Month</Text>
+                  <Text style={[detS.ledgerCell, detS.ledgerHeaderText]}>Earned</Text>
+                  <Text style={[detS.ledgerCell, detS.ledgerHeaderText]}>Paid</Text>
+                  <Text style={[detS.ledgerCell, detS.ledgerHeaderText]}>Balance</Text>
                 </View>
+                {ledger.months.map(m => (
+                  editingMonth === m.month ? (
+                    <View key={m.month} style={detS.ledgerEditRow}>
+                      <Text style={[detS.ledgerCell, detS.ledgerMonthCell]}>{MONTH_ABBR[m.month - 1]}</Text>
+                      <TextInput
+                        style={detS.ledgerEditInput}
+                        value={rowEarned}
+                        onChangeText={setRowEarned}
+                        keyboardType="numeric"
+                        editable={isSalaried}
+                        selectTextOnFocus
+                      />
+                      <TextInput
+                        style={detS.ledgerEditInput}
+                        value={rowPaid}
+                        onChangeText={setRowPaid}
+                        keyboardType="numeric"
+                        selectTextOnFocus
+                      />
+                      <View style={detS.ledgerEditActions}>
+                        <TouchableOpacity onPress={cancelEditRow} hitSlop={6} disabled={savingRow}>
+                          <Feather name="x" size={16} color="#888" />
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={handleSaveRow} hitSlop={6} disabled={savingRow}>
+                          {savingRow
+                            ? <ActivityIndicator size="small" color={accentColor} />
+                            : <Feather name="check" size={16} color={accentColor} />}
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      key={m.month}
+                      style={detS.ledgerRow}
+                      activeOpacity={0.6}
+                      onPress={() => requireActive(() => startEditRow(m))}
+                    >
+                      <Text style={[detS.ledgerCell, detS.ledgerMonthCell]}>{MONTH_ABBR[m.month - 1]}</Text>
+                      <Text style={detS.ledgerCell}>{Number(m.earned).toLocaleString()}</Text>
+                      <Text style={detS.ledgerCell}>{Number(m.paid).toLocaleString()}</Text>
+                      <Text style={[detS.ledgerCell, { fontWeight: '700' }]}>{Number(m.balance).toLocaleString()}</Text>
+                    </TouchableOpacity>
+                  )
+                ))}
               </View>
             )}
 
-            {loadingSum ? (
-              <ActivityIndicator size="small" color={accentColor} style={{ marginVertical: 16 }} />
-            ) : payments.length === 0 ? (
-              <Text style={detS.emptyPay}>No payments recorded yet.</Text>
-            ) : (
-              payments.map((p: any) => (
-                <View key={p.id} style={detS.payRow}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={detS.payDate}>{p.paymentDate}</Text>
-                    {p.note ? <Text style={detS.payNote}>{p.note}</Text> : null}
-                    {p.paidBy ? <Text style={detS.payBy}>By {p.paidBy}</Text> : null}
-                  </View>
-                  <Text style={[detS.payAmt, { color: accentColor }]}>Ksh {Number(p.amount).toLocaleString()}</Text>
-                  <TouchableOpacity onPress={() => handleDeletePayment(p.id, p.amount, p.paymentDate)} hitSlop={8} style={{ marginLeft: 8 }}>
-                    <Feather name="trash-2" size={16} color="#e53e3e" />
-                  </TouchableOpacity>
-                </View>
-              ))
+            {!loadingLedger && !ledger && (
+              <Text style={detS.noInfo}>No ledger data available.</Text>
             )}
           </View>
         </ScrollView>
@@ -1034,9 +842,6 @@ const detS = StyleSheet.create({
   inactiveBanner:     { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fffbeb', borderRadius: 10, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: '#fde68a' },
   inactiveBannerText: { flex: 1, fontSize: 12, color: '#92400e', fontWeight: '500' },
 
-  payEntryRow:  { flexDirection: 'row', gap: 10 },
-  payEntryHalf: { flex: 1 },
-
   statusRow:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: '#eee' },
   statusLabel:   { fontSize: 14, color: '#333', fontWeight: '500' },
   toggleBtn:     { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8, backgroundColor: '#555' },
@@ -1047,33 +852,26 @@ const detS = StyleSheet.create({
   cardLabel:   { fontSize: 10, fontWeight: '600', color: '#555', marginBottom: 3, textAlign: 'center' },
   cardValue:   { fontSize: 13, fontWeight: '800', color: '#1a1a1a', textAlign: 'center' },
 
+  editBadge: { position: 'absolute', bottom: 0, right: 0, width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#fff' },
+
   section:       { backgroundColor: '#fff', borderRadius: 12, padding: 16, borderWidth: 1, borderColor: '#eee' },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
   sectionTitle:  { fontSize: 16, fontWeight: '700', color: '#1a1a1a' },
-  addPayBtn:     { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
-  addPayText:    { fontSize: 13, color: '#fff', fontWeight: '600' },
 
-  addPayForm:    { backgroundColor: '#f9f9ff', borderRadius: 10, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: '#ede9fe' },
   fieldLabel:    { fontSize: 12, fontWeight: '600', color: '#555', marginBottom: 4 },
   fieldInput:    { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14, color: '#1a1a1a', backgroundColor: '#fff', marginBottom: 10 },
   cancelSmBtn:   { flex: 1, paddingVertical: 10, borderRadius: 8, borderWidth: 1, borderColor: '#ddd', alignItems: 'center' },
   cancelSmText:  { fontSize: 14, color: '#555', fontWeight: '600' },
-  savePayBtn:    { flex: 2, paddingVertical: 10, borderRadius: 8, alignItems: 'center' },
-  savePayText:   { fontSize: 14, color: '#fff', fontWeight: '700' },
 
-  payRow:    { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#f0f0f0' },
-  payDate:   { fontSize: 14, fontWeight: '600', color: '#1a1a1a' },
-  payNote:   { fontSize: 12, color: '#888', marginTop: 1 },
-  payBy:     { fontSize: 11, color: '#bbb', marginTop: 1 },
-  payAmt:    { fontSize: 15, fontWeight: '700' },
-  emptyPay:  { fontSize: 13, color: '#bbb', textAlign: 'center', paddingVertical: 16 },
-
-  ledgerTable:      { borderWidth: 1, borderColor: '#eee', borderRadius: 8, overflow: 'hidden' },
+  ledgerTable:      { borderWidth: 1, borderColor: '#eee', borderRadius: 8, overflow: 'hidden', marginTop: 4 },
   ledgerHeaderRow:  { flexDirection: 'row', backgroundColor: '#f9f9f9', paddingVertical: 8, paddingHorizontal: 10 },
   ledgerRow:        { flexDirection: 'row', paddingVertical: 8, paddingHorizontal: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#f0f0f0' },
   ledgerCell:       { flex: 1, fontSize: 12, color: '#1a1a1a', textAlign: 'right' },
   ledgerMonthCell:  { textAlign: 'left', fontWeight: '600' },
   ledgerHeaderText: { fontWeight: '700', color: '#555', fontSize: 11 },
+  ledgerEditRow:      { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#f0f0f0', backgroundColor: '#fafffb' },
+  ledgerEditInput:    { flex: 1, fontSize: 12, borderWidth: 1, borderColor: '#ddd', borderRadius: 4, paddingHorizontal: 4, paddingVertical: 2, marginHorizontal: 2, textAlign: 'right', color: '#1a1a1a' },
+  ledgerEditActions:  { flexDirection: 'row', gap: 8, marginLeft: 6 },
 });
 
 // ─── Screen ───────────────────────────────────────────────────────────────────

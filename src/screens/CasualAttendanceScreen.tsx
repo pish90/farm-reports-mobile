@@ -205,14 +205,6 @@ export default function CasualAttendanceScreen() {
           <Text style={styles.summaryLabel}>Total for {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][month - 1]}</Text>
           <Text style={styles.summaryTotal}>Ksh {monthTotal.toLocaleString()}</Text>
         </View>
-        <TouchableOpacity
-          style={styles.reportBtn}
-          onPress={() => navigation.navigate('CasualReport')}
-          activeOpacity={0.8}
-        >
-          <Feather name="bar-chart-2" size={15} color="#7c3aed" />
-          <Text style={styles.reportBtnText}>Report</Text>
-        </TouchableOpacity>
       </View>
 
       {loading ? (
@@ -300,12 +292,6 @@ const styles = StyleSheet.create({
   },
   summaryLabel: { fontSize: 12, color: '#888', marginBottom: 3 },
   summaryTotal: { fontSize: 20, fontWeight: '800', color: '#7c3aed' },
-  reportBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    paddingHorizontal: 14, paddingVertical: 8,
-    backgroundColor: '#f3e8ff', borderRadius: 20,
-  },
-  reportBtnText: { fontSize: 13, fontWeight: '700', color: '#7c3aed' },
 
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   errorText: { marginTop: 12, color: '#e53e3e', textAlign: 'center', fontSize: 14 },

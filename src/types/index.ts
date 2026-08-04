@@ -338,7 +338,6 @@ export type AttendanceStackParamList = {
   CasualHome: undefined;
   CreateWorkSession: { session?: CasualWorkSessionDto } | undefined;
   SelectCasuals: { currentSelection: Array<{ id: number; rateOverride?: number }>; defaultRate: number };
-  CasualReport: undefined;
 };
 
 export type LivestockStackParamList = {
