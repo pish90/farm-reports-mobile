@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { fromByteArray } from 'base64-js';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import apiClient from './apiClient';
@@ -27,14 +28,6 @@ export interface ExpenseEntryPayload {
 export interface MilkEntryPayload {
   dayOfMonth: number;
   litres: number;
-}
-
-function uint8ToBase64(bytes: Uint8Array): string {
-  let binary = '';
-  for (let i = 0; i < bytes.length; i += 8192) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
-  }
-  return btoa(binary);
 }
 
 export const adminService = {
@@ -104,7 +97,7 @@ export const adminService = {
     );
     if (!response.ok) throw new Error('Download failed');
     const fileUri = (FileSystem.cacheDirectory ?? '') + `farm-reports-${year}-${String(month).padStart(2, '0')}.xlsx`;
-    await FileSystem.writeAsStringAsync(fileUri, uint8ToBase64(new Uint8Array(await response.arrayBuffer())), { encoding: 'base64' });
+    await FileSystem.writeAsStringAsync(fileUri, fromByteArray(new Uint8Array(await response.arrayBuffer())), { encoding: 'base64' });
     await Sharing.shareAsync(fileUri, {
       mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       dialogTitle: 'Save Farm Reports',
@@ -121,7 +114,7 @@ export const adminService = {
     if (!response.ok) throw new Error('Backup failed');
     const today = new Date().toISOString().slice(0, 10);
     const fileUri = (FileSystem.cacheDirectory ?? '') + `attendance-backup-${today}.csv`;
-    await FileSystem.writeAsStringAsync(fileUri, uint8ToBase64(new Uint8Array(await response.arrayBuffer())), { encoding: 'base64' });
+    await FileSystem.writeAsStringAsync(fileUri, fromByteArray(new Uint8Array(await response.arrayBuffer())), { encoding: 'base64' });
     await Sharing.shareAsync(fileUri, {
       mimeType: 'text/csv',
       dialogTitle: 'Save Attendance Backup',
@@ -138,7 +131,7 @@ export const adminService = {
     );
     if (!response.ok) throw new Error('Download failed');
     const fileUri = (FileSystem.cacheDirectory ?? '') + `${safeName}_${year}-${String(month).padStart(2, '0')}.xlsx`;
-    await FileSystem.writeAsStringAsync(fileUri, uint8ToBase64(new Uint8Array(await response.arrayBuffer())), { encoding: 'base64' });
+    await FileSystem.writeAsStringAsync(fileUri, fromByteArray(new Uint8Array(await response.arrayBuffer())), { encoding: 'base64' });
     await Sharing.shareAsync(fileUri, {
       mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       dialogTitle: 'Save Farm Report',

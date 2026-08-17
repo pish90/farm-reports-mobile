@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { fromByteArray } from 'base64-js';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { getDb } from '../db/database';
@@ -247,14 +248,10 @@ export async function downloadAndShareMonthlyExcel(
   }
 
   const bytes = new Uint8Array(await response.arrayBuffer());
-  let binary = '';
-  for (let i = 0; i < bytes.length; i += 8192) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
-  }
 
   const fileName = `casual-labour-${year}-${String(month).padStart(2, '0')}.xlsx`;
   const fileUri = (FileSystem.cacheDirectory ?? '') + fileName;
-  await FileSystem.writeAsStringAsync(fileUri, btoa(binary), { encoding: 'base64' });
+  await FileSystem.writeAsStringAsync(fileUri, fromByteArray(bytes), { encoding: 'base64' });
 
   await Sharing.shareAsync(fileUri, {
     mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
