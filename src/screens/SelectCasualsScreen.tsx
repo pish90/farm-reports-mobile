@@ -1,5 +1,5 @@
 import { Feather } from '@expo/vector-icons';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -12,10 +12,12 @@ import {
 } from 'react-native';
 import { useFocusEffect, useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { getEmployees } from '../services/employeeService';
+import { getEmployee, getEmployees } from '../services/employeeService';
 import workSessionDraft from '../store/workSessionDraft';
 import { useAuth } from '../store/AuthContext';
 import { AttendanceStackParamList, EmployeeDto } from '../types';
+
+const PAGE_SIZE = 10;
 
 type NavProp = NativeStackNavigationProp<AttendanceStackParamList, 'SelectCasuals'>;
 type RoutePropType = RouteProp<AttendanceStackParamList, 'SelectCasuals'>;
@@ -28,30 +30,43 @@ export default function SelectCasualsScreen() {
   const { currentSelection } = route.params;
   const selectedIds = new Set(currentSelection.map(c => c.id));
 
-  const [employees, setEmployees] = useState<EmployeeDto[]>([]);
-  const [checked, setChecked]     = useState<Set<number>>(new Set(selectedIds));
-  const [search, setSearch]       = useState('');
-  const [loading, setLoading]     = useState(true);
+  const [employees, setEmployees]     = useState<EmployeeDto[]>([]);
+  const [totalElements, setTotalElements] = useState(0);
+  const [checked, setChecked]         = useState<Set<number>>(new Set(selectedIds));
+  const [search, setSearch]           = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [loading, setLoading]         = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  const pageRef = useRef(0);
+  const hasMore = employees.length < totalElements;
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const fetchPage = useCallback((page: number) => {
+    if (!user?.farmId) return;
+    if (page === 0) setLoading(true); else setLoadingMore(true);
+    getEmployees(user.farmId, { status: 'ACTIVE', search: debouncedSearch || undefined, page, size: PAGE_SIZE })
+      .then(res => {
+        setTotalElements(res.totalElements);
+        setEmployees(prev => page === 0 ? res.content : [...prev, ...res.content]);
+        pageRef.current = page;
+      })
+      .catch(() => {})
+      .finally(() => { setLoading(false); setLoadingMore(false); });
+  }, [user?.farmId, debouncedSearch]);
 
   useFocusEffect(
-    useCallback(() => {
-      if (!user?.farmId) return;
-      setLoading(true);
-      getEmployees(user.farmId)
-        .then(data => setEmployees(data.filter(e => e.status === 'ACTIVE')))
-        .catch(() => {})
-        .finally(() => setLoading(false));
-    }, [user?.farmId]),
+    useCallback(() => { fetchPage(0); }, [fetchPage]),
   );
 
-  const filtered = employees.filter(e => {
-    if (!search.trim()) return true;
-    const q = search.toLowerCase();
-    return (
-      e.fullName.toLowerCase().includes(q) ||
-      e.lsNumber.toLowerCase().includes(q)
-    );
-  });
+  function loadMore() {
+    if (!hasMore || loadingMore || loading) return;
+    fetchPage(pageRef.current + 1);
+  }
 
   function toggle(id: number) {
     setChecked(prev => {
@@ -61,13 +76,27 @@ export default function SelectCasualsScreen() {
     });
   }
 
-  function handleDone() {
-    const prevMap = new Map(currentSelection.map(c => [c.id, c.rateOverride]));
-    const selected = employees
-      .filter(e => checked.has(e.id))
-      .map(e => ({ id: e.id, name: e.fullName, rateOverride: prevMap.get(e.id) }));
-    workSessionDraft.pendingCasuals = selected;
-    navigation.goBack();
+  const [finishing, setFinishing] = useState(false);
+
+  async function handleDone() {
+    if (!user?.farmId) return;
+    setFinishing(true);
+    const prevSelection = new Map(currentSelection.map(c => [c.id, c]));
+    const loadedById = new Map(employees.map(e => [e.id, e]));
+    try {
+      // A previously-selected employee may not be in the currently-loaded pages
+      // (e.g. selected earlier, on a page not yet scrolled to) — fetch those
+      // individually rather than silently dropping them from the selection.
+      const selected = await Promise.all(Array.from(checked).map(async id => {
+        const loaded = loadedById.get(id);
+        const emp = loaded ?? await getEmployee(user.farmId!, id);
+        return { id: emp.id, name: emp.fullName, rateOverride: prevSelection.get(id)?.rateOverride };
+      }));
+      workSessionDraft.pendingCasuals = selected;
+      navigation.goBack();
+    } finally {
+      setFinishing(false);
+    }
   }
 
   return (
@@ -96,9 +125,14 @@ export default function SelectCasualsScreen() {
         </View>
       ) : (
         <FlatList
-          data={filtered}
+          data={employees}
           keyExtractor={e => String(e.id)}
           contentContainerStyle={styles.list}
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.3}
+          ListFooterComponent={
+            loadingMore ? <ActivityIndicator size="small" color="#7c3aed" style={{ paddingVertical: 16 }} /> : null
+          }
           renderItem={({ item }) => {
             const isChecked = checked.has(item.id);
             const isSalaried = item.employmentType === 'SALARIED';
@@ -146,8 +180,15 @@ export default function SelectCasualsScreen() {
       {/* Done button */}
       <View style={styles.footer}>
         <Text style={styles.footerCount}>{checked.size} selected</Text>
-        <TouchableOpacity style={styles.doneBtn} onPress={handleDone} activeOpacity={0.85}>
-          <Text style={styles.doneBtnText}>Done</Text>
+        <TouchableOpacity
+          style={styles.doneBtn}
+          onPress={handleDone}
+          activeOpacity={0.85}
+          disabled={finishing}
+        >
+          {finishing
+            ? <ActivityIndicator size="small" color="#fff" />
+            : <Text style={styles.doneBtnText}>Done</Text>}
         </TouchableOpacity>
       </View>
     </View>

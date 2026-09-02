@@ -15,7 +15,7 @@ import {
 import { auditService } from '../services/auditService';
 import { AuditActionType, AuditLog } from '../types';
 
-const PAGE_SIZE = 30;
+const PAGE_SIZE = 10;
 
 const ACTION_OPTIONS: { label: string; value: AuditActionType | '' }[] = [
   { label: 'All Actions', value: '' },

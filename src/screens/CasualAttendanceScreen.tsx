@@ -136,6 +136,8 @@ const detailStyles = StyleSheet.create({
 
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
+const PAGE_SIZE = 10;
+
 export default function CasualAttendanceScreen() {
   const { user } = useAuth();
   const navigation = useNavigation<NativeStackNavigationProp<AttendanceStackParamList>>();
@@ -152,22 +154,35 @@ export default function CasualAttendanceScreen() {
   useFocusEffect(
     useCallback(() => {
       if (!user?.farmId) return;
+      let cancelled = false;
       setLoading(true);
       setError(null);
-      getWorkSessions(user.farmId)
-        .then(data => setSessions(data))
-        .catch(e => setError(e.message ?? 'Failed to load sessions'))
-        .finally(() => setLoading(false));
-    }, [user?.farmId]),
+
+      // The list is scoped to one month (the picker above), which is naturally small,
+      // so rather than a manual "load more" this drains every page for that month up
+      // front — the monthly total below needs the complete set to be accurate.
+      async function loadAllForMonth() {
+        const all: CasualWorkSessionDto[] = [];
+        let page = 0;
+        for (;;) {
+          const res = await getWorkSessions(user!.farmId!, { year, month, page, size: PAGE_SIZE });
+          all.push(...res.content);
+          if (cancelled || page + 1 >= res.totalPages) break;
+          page += 1;
+        }
+        return all;
+      }
+
+      loadAllForMonth()
+        .then(data => { if (!cancelled) setSessions(data); })
+        .catch(e => { if (!cancelled) setError(e.message ?? 'Failed to load sessions'); })
+        .finally(() => { if (!cancelled) setLoading(false); });
+
+      return () => { cancelled = true; };
+    }, [user?.farmId, year, month]),
   );
 
-  // Filter sessions to selected month
-  const monthSessions = sessions.filter(s => {
-    const [sy, sm] = s.sessionDate.split('-').map(Number);
-    return sy === year && sm === month;
-  });
-
-  const monthTotal = monthSessions.reduce((sum, s) => sum + totalForSession(s), 0);
+  const monthTotal = sessions.reduce((sum, s) => sum + totalForSession(s), 0);
 
   function handleDelete(session: CasualWorkSessionDto) {
     Alert.alert(
@@ -218,7 +233,7 @@ export default function CasualAttendanceScreen() {
         </View>
       ) : (
         <FlatList
-          data={monthSessions}
+          data={sessions}
           keyExtractor={s => String(s.id)}
           contentContainerStyle={styles.list}
           ListEmptyComponent={

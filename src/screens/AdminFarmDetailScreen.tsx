@@ -220,14 +220,21 @@ export default function AdminFarmDetailScreen({ route, navigation }: Props) {
     loadReport();
     getExpenseCategories().then(setCategories).catch(() => {});
     getBusinessUnits().then(setBusinessUnits).catch(() => {});
-    getWorkSessions(farmId)
-      .then(sessions => setWorkSessions(
-        sessions.filter(s => {
-          const d = new Date(s.sessionDate + 'T00:00:00');
-          return d.getFullYear() === year && d.getMonth() + 1 === month;
-        })
-      ))
-      .catch(() => {});
+
+    // Scoped to one month (naturally small), so drain every page up front rather
+    // than a manual "load more" — the session total below needs the complete set.
+    async function loadAllForMonth() {
+      const all: CasualWorkSessionDto[] = [];
+      let page = 0;
+      for (;;) {
+        const res = await getWorkSessions(farmId, { year, month, page, size: 10 });
+        all.push(...res.content);
+        if (page + 1 >= res.totalPages) break;
+        page += 1;
+      }
+      return all;
+    }
+    loadAllForMonth().then(setWorkSessions).catch(() => {});
   }, []);
 
   async function loadReport() {

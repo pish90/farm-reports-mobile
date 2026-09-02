@@ -1,5 +1,5 @@
 import apiClient from './apiClient';
-import { AuditLogPage } from '../types';
+import { AuditLog, PageDto } from '../types';
 
 export const auditService = {
   async getAuditLogs(params: {
@@ -9,7 +9,7 @@ export const auditService = {
     endDate?: string;
     page?: number;
     size?: number;
-  }): Promise<AuditLogPage> {
+  }): Promise<PageDto<AuditLog>> {
     const res = await apiClient.get('/admin/audit-logs', { params });
     return res.data.data;
   },

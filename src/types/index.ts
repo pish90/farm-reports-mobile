@@ -45,8 +45,8 @@ export interface AuditLog {
   ipAddress: string | null;
 }
 
-export interface AuditLogPage {
-  content: AuditLog[];
+export interface PageDto<T> {
+  content: T[];
   totalElements: number;
   totalPages: number;
   page: number;

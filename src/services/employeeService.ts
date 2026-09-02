@@ -5,18 +5,27 @@ import {
   EmployeePaymentDto,
   EmployeeRequest,
   EmployeeSummaryDto,
+  PageDto,
 } from '../types';
 
 export async function getEmployees(
   farmId: number,
-  employmentType?: 'SALARIED' | 'CASUAL',
-  search?: string,
-): Promise<EmployeeDto[]> {
-  const params: Record<string, string> = {};
-  if (employmentType) params.employmentType = employmentType;
-  if (search) params.search = search;
+  opts: {
+    employmentType?: 'SALARIED' | 'CASUAL';
+    search?: string;
+    status?: string;
+    page?: number;
+    size?: number;
+  } = {},
+): Promise<PageDto<EmployeeDto>> {
+  const params: Record<string, string | number> = {};
+  if (opts.employmentType) params.employmentType = opts.employmentType;
+  if (opts.search) params.search = opts.search;
+  if (opts.status) params.status = opts.status;
+  if (opts.page !== undefined) params.page = opts.page;
+  if (opts.size !== undefined) params.size = opts.size;
   const res = await apiClient.get(`/farms/${farmId}/employees`, { params });
-  return res.data.data ?? [];
+  return res.data.data ?? { content: [], totalElements: 0, totalPages: 0, page: 0, size: 0 };
 }
 
 export async function getEmployee(farmId: number, id: number): Promise<EmployeeDto> {

@@ -2,7 +2,7 @@ import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -44,6 +44,8 @@ import {
   EmployeeLedgerMonthDto,
   EmployeeSummaryDto,
 } from '../types';
+
+const PAGE_SIZE = 10;
 
 const TODAY = new Date().toISOString().slice(0, 10);
 const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -884,36 +886,56 @@ export default function WorkersScreen() {
   const farmId    = routeParams?.farmId ?? user?.farmId!;
 
   const [employees,  setEmployees]  = useState<EmployeeDto[]>([]);
+  const [totalElements, setTotalElements] = useState(0);
   const [isLoaded,   setIsLoaded]   = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [loadError,  setLoadError]  = useState<string | null>(null);
   const [search,     setSearch]     = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [hasCasuals, setHasCasuals] = useState(false);
 
   const [showAdd,    setShowAdd]    = useState(false);
   const [detailEmployee,    setDetailEmployee]    = useState<EmployeeDto | null>(null);
 
-  const load = useCallback(async () => {
+  const pageRef = useRef(0);
+  const hasMore = employees.length < totalElements;
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const fetchPage = useCallback(async (page: number) => {
     if (!farmId) return;
-    setIsLoaded(false); setLoadError(null);
+    if (page === 0) { setIsLoaded(false); setLoadError(null); } else { setLoadingMore(true); }
     try {
-      setEmployees(await getEmployees(farmId));
+      const res = await getEmployees(farmId, { search: debouncedSearch || undefined, page, size: PAGE_SIZE });
+      setTotalElements(res.totalElements);
+      setEmployees(prev => page === 0 ? res.content : [...prev, ...res.content]);
+      pageRef.current = page;
     } catch (e: any) {
       setLoadError(e.message ?? 'Failed to load employees');
     } finally {
       setIsLoaded(true);
+      setLoadingMore(false);
     }
-  }, [farmId]);
+  }, [farmId, debouncedSearch]);
+
+  const load = useCallback(() => fetchPage(0), [fetchPage]);
 
   useEffect(() => { load(); }, [load]);
 
-  const filtered = employees.filter(e => {
-    if (!search.trim()) return true;
-    const q = search.toLowerCase();
-    return (
-      e.fullName.toLowerCase().includes(q) ||
-      e.lsNumber.toLowerCase().includes(q) ||
-      (e.nationalId ?? '').toLowerCase().includes(q)
-    );
-  });
+  useEffect(() => {
+    if (!farmId) return;
+    getEmployees(farmId, { employmentType: 'CASUAL', size: 1 })
+      .then(res => setHasCasuals(res.totalElements > 0))
+      .catch(() => {});
+  }, [farmId]);
+
+  function loadMore() {
+    if (!hasMore || loadingMore || !isLoaded) return;
+    fetchPage(pageRef.current + 1);
+  }
 
   const handleAdd = useCallback(async (req: import('../types').EmployeeRequest) => {
     if (!farmId) return;
@@ -953,8 +975,6 @@ export default function WorkersScreen() {
     );
   }, [farmId, load]);
 
-  const casualCount = employees.filter(e => e.employmentType === 'CASUAL').length;
-
   return (
     <View style={styles.container}>
       {/* Search bar */}
@@ -977,8 +997,8 @@ export default function WorkersScreen() {
 
       {/* Toolbar */}
       <View style={styles.toolbar}>
-        <Text style={styles.count}>{employees.length} employee{employees.length !== 1 ? 's' : ''}</Text>
-        {!routeParams?.farmId && casualCount > 0 && (
+        <Text style={styles.count}>{totalElements} employee{totalElements !== 1 ? 's' : ''}</Text>
+        {!routeParams?.farmId && hasCasuals && (
           <TouchableOpacity style={styles.reportBtn} onPress={() => navigation.navigate('CasualHome')} activeOpacity={0.8}>
             <Feather name="calendar" size={14} color="#2d6a4f" />
             <Text style={styles.reportBtnText}>Work Sessions</Text>
@@ -998,7 +1018,7 @@ export default function WorkersScreen() {
         <View style={styles.centered}><ActivityIndicator size="large" color="#2d6a4f" /></View>
       ) : (
         <FlatList
-          data={filtered}
+          data={employees}
           keyExtractor={(e) => String(e.id)}
           renderItem={({ item }) => (
             <EmployeeRow
@@ -1007,6 +1027,11 @@ export default function WorkersScreen() {
               onDelete={handleDelete}
             />
           )}
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.3}
+          ListFooterComponent={
+            loadingMore ? <ActivityIndicator size="small" color="#2d6a4f" style={{ paddingVertical: 16 }} /> : null
+          }
           ListEmptyComponent={
             <View style={styles.empty}>
               <Feather name="users" size={44} color="#ccc" />
@@ -1014,7 +1039,7 @@ export default function WorkersScreen() {
               {!search && <Text style={styles.emptyHint}>Tap + to add the first employee</Text>}
             </View>
           }
-          contentContainerStyle={filtered.length === 0 ? { flex: 1 } : undefined}
+          contentContainerStyle={employees.length === 0 ? { flex: 1 } : undefined}
         />
       )}
 

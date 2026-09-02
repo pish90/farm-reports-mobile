@@ -12,6 +12,7 @@ import {
   CasualWorkSessionDto,
   CreateWorkSessionRequest,
   EmployeeLedgerDto,
+  PageDto,
 } from '../types';
 import apiClient from './apiClient';
 
@@ -132,9 +133,12 @@ export async function deactivateCasualLabourer(farmId: number, labourerId: numbe
 
 // ── Work Sessions ─────────────────────────────────────────────────────────────
 
-export async function getWorkSessions(farmId: number): Promise<CasualWorkSessionDto[]> {
-  const res = await apiClient.get(`/farms/${farmId}/casual-labourers/work-sessions`);
-  return res.data.data as CasualWorkSessionDto[];
+export async function getWorkSessions(
+  farmId: number,
+  opts: { year?: number; month?: number; page?: number; size?: number } = {},
+): Promise<PageDto<CasualWorkSessionDto>> {
+  const res = await apiClient.get(`/farms/${farmId}/casual-labourers/work-sessions`, { params: opts });
+  return res.data.data as PageDto<CasualWorkSessionDto>;
 }
 
 export async function createWorkSession(
