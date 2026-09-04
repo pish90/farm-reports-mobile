@@ -67,23 +67,26 @@ function EmployeeRow({
   onTap: (e: EmployeeDto) => void;
   onDelete: (e: EmployeeDto) => void;
 }) {
-  const isSalaried = employee.employmentType === 'SALARIED';
+  const { isSalaried, isCasual } = employee;
+  const accentBg = isSalaried && isCasual ? '#ccfbf1' : isSalaried ? '#e8f5ef' : '#f3e8ff';
+  const accentColor = isSalaried && isCasual ? '#0f766e' : isSalaried ? '#2d6a4f' : '#7c3aed';
+  const typeLabel = [isSalaried && 'Salaried', isCasual && 'Casual'].filter(Boolean).join(' + ');
   const photoUri = employee.photoBase64
     ? `data:${employee.photoMimeType ?? 'image/jpeg'};base64,${employee.photoBase64}`
     : null;
 
   return (
     <TouchableOpacity style={rowS.row} onPress={() => onTap(employee)} activeOpacity={0.75}>
-      <View style={[rowS.avatar, { backgroundColor: isSalaried ? '#e8f5ef' : '#f3e8ff' }]}>
+      <View style={[rowS.avatar, { backgroundColor: accentBg }]}>
         {photoUri
           ? <Image source={{ uri: photoUri }} style={rowS.photo} />
-          : <Feather name="user" size={16} color={isSalaried ? '#2d6a4f' : '#7c3aed'} />}
+          : <Feather name="user" size={16} color={accentColor} />}
       </View>
       <View style={{ flex: 1 }}>
         <Text style={rowS.name}>{employee.fullName}</Text>
-        <Text style={[rowS.ls, { color: isSalaried ? '#2d6a4f' : '#7c3aed' }]}>
+        <Text style={[rowS.ls, { color: accentColor }]}>
           {displayLs(employee.lsNumber)}
-          {employee.employmentType === 'CASUAL' ? '  ·  Casual' : ''}
+          {isSalaried && isCasual ? `  ·  ${typeLabel}` : isCasual ? '  ·  Casual' : ''}
         </Text>
       </View>
       {employee.status === 'INACTIVE' && (
@@ -118,7 +121,8 @@ function AddEmployeeModal({
   onSave: (req: import('../types').EmployeeRequest) => Promise<void>;
   onCancel: () => void;
 }) {
-  const [type, setType]         = useState<'SALARIED' | 'CASUAL'>('SALARIED');
+  const [isSalariedSel, setIsSalariedSel] = useState(true);
+  const [isCasualSel, setIsCasualSel]     = useState(false);
   const [firstName, setFirst]   = useState('');
   const [lastName, setLast]     = useState('');
   const [phone, setPhone]       = useState('');
@@ -133,7 +137,7 @@ function AddEmployeeModal({
   const [saving, setSaving] = useState(false);
 
   function reset() {
-    setType('SALARIED'); setFirst(''); setLast(''); setPhone('');
+    setIsSalariedSel(true); setIsCasualSel(false); setFirst(''); setLast(''); setPhone('');
     setNatId(''); setGender(''); setDob(''); setStart(''); setRate('');
     setPhotoUri(null); setPhotoBase64(null); setPhotoMimeType(null);
   }
@@ -175,19 +179,20 @@ function AddEmployeeModal({
 
   async function handleSave() {
     const first = firstName.trim();
-    if (!first) return;
+    if (!first || (!isSalariedSel && !isCasualSel)) return;
     setSaving(true);
     try {
       await onSave({
         firstName: first,
         lastName: lastName.trim() || null,
         phone: phone.trim() || null,
-        employmentType: type,
+        isSalaried: isSalariedSel,
+        isCasual: isCasualSel,
         nationalId: nationalId.trim() || null,
         gender: gender || null,
         dateOfBirth: dob.trim() || null,
         startDate: startDate.trim() || null,
-        defaultDailyRate: type === 'CASUAL' && dailyRate ? parseFloat(dailyRate) : null,
+        defaultDailyRate: isCasualSel && dailyRate ? parseFloat(dailyRate) : null,
         photoBase64,
         photoMimeType,
         status: 'ACTIVE',
@@ -198,7 +203,7 @@ function AddEmployeeModal({
     }
   }
 
-  const canSave = firstName.trim().length > 0 && !saving;
+  const canSave = firstName.trim().length > 0 && (isSalariedSel || isCasualSel) && !saving;
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={() => { reset(); onCancel(); }}>
@@ -208,19 +213,19 @@ function AddEmployeeModal({
             <View style={addS.sheet}>
               <Text style={addS.title}>Add Employee</Text>
 
-              {/* Type selector */}
+              {/* Type selector — both can be selected at once */}
               <View style={addS.typeRow}>
                 <TouchableOpacity
-                  style={[addS.typeBtn, type === 'SALARIED' && addS.typeBtnActive]}
-                  onPress={() => setType('SALARIED')}
+                  style={[addS.typeBtn, isSalariedSel && addS.typeBtnActive]}
+                  onPress={() => setIsSalariedSel((v) => !v)}
                 >
-                  <Text style={[addS.typeBtnText, type === 'SALARIED' && addS.typeBtnTextActive]}>Salaried</Text>
+                  <Text style={[addS.typeBtnText, isSalariedSel && addS.typeBtnTextActive]}>Salaried</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[addS.typeBtn, type === 'CASUAL' && addS.typeBtnActiveCasual]}
-                  onPress={() => setType('CASUAL')}
+                  style={[addS.typeBtn, isCasualSel && addS.typeBtnActiveCasual]}
+                  onPress={() => setIsCasualSel((v) => !v)}
                 >
-                  <Text style={[addS.typeBtnText, type === 'CASUAL' && addS.typeBtnTextActiveCasual]}>Casual</Text>
+                  <Text style={[addS.typeBtnText, isCasualSel && addS.typeBtnTextActiveCasual]}>Casual</Text>
                 </TouchableOpacity>
               </View>
 
@@ -265,7 +270,7 @@ function AddEmployeeModal({
               <Text style={addS.label}>Start Date</Text>
               <DateField value={startDate} onChange={setStart} placeholder={TODAY} style={addS.input} />
 
-              {type === 'CASUAL' && (
+              {isCasualSel && (
                 <>
                   <Text style={addS.label}>Default Daily Rate (Ksh)</Text>
                   <TextInput style={addS.input} value={dailyRate} onChangeText={setRate} placeholder="150" placeholderTextColor="#bbb" keyboardType="numeric" maxLength={10} />
@@ -342,11 +347,14 @@ function EmployeeDetailModal({
   onClose: () => void;
   onRefresh: () => void;
 }) {
-  const isSalaried = employee?.employmentType === 'SALARIED';
+  const isSalaried = employee?.isSalaried ?? false;
+  const isCasual   = employee?.isCasual ?? false;
   const isActive   = employee?.status === 'ACTIVE';
-  const accentColor = isSalaried ? '#2d6a4f' : '#7c3aed';
+  const accentColor = isSalaried && isCasual ? '#0f766e' : isSalaried ? '#2d6a4f' : '#7c3aed';
+  const typeLabel = [isSalaried && 'Salaried', isCasual && 'Casual'].filter(Boolean).join(' + ') || '—';
 
-  const [summary,      setSummary]      = useState<EmployeeSummaryDto | CasualLabourerSummaryDto | null>(null);
+  const [salariedSummary, setSalariedSummary] = useState<EmployeeSummaryDto | null>(null);
+  const [casualSummary,   setCasualSummary]   = useState<CasualLabourerSummaryDto | null>(null);
   const [loadingSum,   setLoadingSum]   = useState(false);
 
   // Status toggle
@@ -367,12 +375,16 @@ function EmployeeDetailModal({
 
   const now = new Date();
 
-  // Annual ledger
-  const [ledgerYear, setLedgerYear] = useState(now.getFullYear());
-  const [ledger, setLedger] = useState<EmployeeLedgerDto | null>(null);
-  const [loadingLedger, setLoadingLedger] = useState(false);
+  // Annual ledger — separate salaried/casual tables when the employee is both
+  const [salariedLedgerYear, setSalariedLedgerYear] = useState(now.getFullYear());
+  const [casualLedgerYear, setCasualLedgerYear] = useState(now.getFullYear());
+  const [salariedLedger, setSalariedLedger] = useState<EmployeeLedgerDto | null>(null);
+  const [casualLedger, setCasualLedger] = useState<EmployeeLedgerDto | null>(null);
+  const [loadingSalariedLedger, setLoadingSalariedLedger] = useState(false);
+  const [loadingCasualLedger, setLoadingCasualLedger] = useState(false);
 
-  // Ledger row inline edit
+  // Ledger row inline edit — only one row (in either table) editable at a time
+  const [editingKind, setEditingKind] = useState<'salaried' | 'casual' | null>(null);
   const [editingMonth, setEditingMonth] = useState<number | null>(null);
   const [rowEarned, setRowEarned] = useState('');
   const [rowPaid, setRowPaid] = useState('');
@@ -386,26 +398,35 @@ function EmployeeDetailModal({
   useEffect(() => {
     if (!visible) {
       setIsEditing(false);
+      setEditingKind(null);
       setEditingMonth(null);
     }
   }, [visible]);
 
   useEffect(() => {
-    if (!visible || !employee) return;
-    loadLedger();
-  }, [visible, employee?.id, ledgerYear]);
+    if (!visible || !employee || !isSalaried) return;
+    loadLedger('salaried');
+  }, [visible, employee?.id, isSalaried, salariedLedgerYear]);
 
-  async function loadLedger() {
+  useEffect(() => {
+    if (!visible || !employee || !isCasual) return;
+    loadLedger('casual');
+  }, [visible, employee?.id, isCasual, casualLedgerYear]);
+
+  async function loadLedger(kind: 'salaried' | 'casual') {
     if (!employee) return;
-    setLoadingLedger(true);
+    const setLoading = kind === 'salaried' ? setLoadingSalariedLedger : setLoadingCasualLedger;
+    const setData = kind === 'salaried' ? setSalariedLedger : setCasualLedger;
+    const year = kind === 'salaried' ? salariedLedgerYear : casualLedgerYear;
+    setLoading(true);
     try {
-      setLedger(isSalaried
-        ? await getEmployeeLedger(farmId, employee.id, ledgerYear)
-        : await getCasualLabourerLedger(farmId, employee.id, ledgerYear));
+      setData(kind === 'salaried'
+        ? await getEmployeeLedger(farmId, employee.id, year)
+        : await getCasualLabourerLedger(farmId, employee.id, year));
     } catch {
-      setLedger(null);
+      setData(null);
     } finally {
-      setLoadingLedger(false);
+      setLoading(false);
     }
   }
 
@@ -416,18 +437,24 @@ function EmployeeDetailModal({
     return `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
   }
 
-  function startEditRow(m: EmployeeLedgerMonthDto) {
+  function startEditRow(kind: 'salaried' | 'casual', m: EmployeeLedgerMonthDto) {
+    setEditingKind(kind);
     setEditingMonth(m.month);
     setRowEarned(String(m.earned));
     setRowPaid(String(m.paid));
   }
 
   function cancelEditRow() {
+    setEditingKind(null);
     setEditingMonth(null);
   }
 
   async function handleSaveRow() {
-    if (!employee || editingMonth == null || !ledger) return;
+    if (!employee || editingMonth == null || !editingKind) return;
+    const editingSalaried = editingKind === 'salaried';
+    const ledger = editingSalaried ? salariedLedger : casualLedger;
+    const ledgerYear = editingSalaried ? salariedLedgerYear : casualLedgerYear;
+    if (!ledger) return;
     const monthData = ledger.months.find(mm => mm.month === editingMonth);
     if (!monthData) return;
     setSavingRow(true);
@@ -435,7 +462,7 @@ function EmployeeDetailModal({
       const newEarned = parseFloat(rowEarned.replace(/,/g, '')) || 0;
       const newPaid = parseFloat(rowPaid.replace(/,/g, '')) || 0;
 
-      if (isSalaried) {
+      if (editingSalaried) {
         const existingRows = await getPayroll(farmId, ledgerYear, editingMonth);
         const existing = existingRows.find(r => r.employeeId === employee.id);
         const newRemaining = (existing?.amountRemaining ?? 0) - (existing?.grossSalary ?? 0) + newEarned;
@@ -454,7 +481,7 @@ function EmployeeDetailModal({
       const delta = newPaid - monthData.paid;
       if (delta > 0) {
         const paymentDate = lastDayOfMonthCapped(ledgerYear, editingMonth);
-        if (isSalaried) {
+        if (editingSalaried) {
           await recordEmployeePayment(farmId, employee.id, { paymentDate, amount: delta, note: 'Ledger adjustment' });
         } else {
           await recordPayment(farmId, employee.id, { paymentDate, amount: delta, note: 'Ledger adjustment' });
@@ -466,8 +493,10 @@ function EmployeeDetailModal({
         );
       }
 
+      const kind = editingKind;
+      setEditingKind(null);
       setEditingMonth(null);
-      await loadLedger();
+      await loadLedger(kind);
       await loadData();
     } catch (e: any) {
       Alert.alert('Error', e.message ?? 'Failed to save.');
@@ -508,13 +537,14 @@ function EmployeeDetailModal({
         firstName: first,
         lastName: efLast.trim() || null,
         phone: efPhone.trim() || null,
-        employmentType: employee.employmentType,
+        isSalaried: employee.isSalaried,
+        isCasual: employee.isCasual,
         jobTitle: efJobTitle.trim() || null,
         nationalId: efNatId.trim() || null,
         gender: efGender || null,
         dateOfBirth: efDob.trim() || null,
         startDate: efStart.trim() || null,
-        defaultDailyRate: employee.employmentType === 'CASUAL' && efRate ? parseFloat(efRate) : null,
+        defaultDailyRate: employee.isCasual && efRate ? parseFloat(efRate) : null,
         status: employee.status,
       });
       setIsEditing(false);
@@ -530,15 +560,11 @@ function EmployeeDetailModal({
   async function loadData() {
     if (!employee) return;
     setLoadingSum(true);
-    setSummary(null);
+    setSalariedSummary(null);
+    setCasualSummary(null);
     try {
-      if (isSalaried) {
-        const s = await getEmployeeSummary(farmId, employee.id);
-        setSummary(s);
-      } else {
-        const s = await getCasualLabourerSummary(farmId, employee.id);
-        setSummary(s);
-      }
+      if (isSalaried) setSalariedSummary(await getEmployeeSummary(farmId, employee.id));
+      if (isCasual) setCasualSummary(await getCasualLabourerSummary(farmId, employee.id));
     } catch {
       // offline — show zeros
     } finally {
@@ -555,7 +581,8 @@ function EmployeeDetailModal({
         firstName: employee.firstName,
         lastName: employee.lastName,
         phone: employee.phone,
-        employmentType: employee.employmentType,
+        isSalaried: employee.isSalaried,
+        isCasual: employee.isCasual,
         jobTitle: employee.jobTitle,
         nationalId: employee.nationalId,
         gender: employee.gender,
@@ -578,10 +605,83 @@ function EmployeeDetailModal({
   const photoUri = employee.photoBase64
     ? `data:${employee.photoMimeType ?? 'image/jpeg'};base64,${employee.photoBase64}`
     : null;
+  const accentBg = isSalaried && isCasual ? '#ccfbf1' : isSalaried ? '#e8f5ef' : '#f3e8ff';
 
-  const earned   = summary?.allTimeEarned ?? 0;
-  const paid     = summary?.allTimePaid ?? 0;
-  const outstanding = summary?.outstanding ?? 0;
+  function renderLedgerBlock(kind: 'salaried' | 'casual') {
+    const title = kind === 'salaried' ? 'Annual Ledger (Salaried)' : 'Annual Ledger (Casual)';
+    const ledger = kind === 'salaried' ? salariedLedger : casualLedger;
+    const loading = kind === 'salaried' ? loadingSalariedLedger : loadingCasualLedger;
+    const year = kind === 'salaried' ? salariedLedgerYear : casualLedgerYear;
+    const setYear = kind === 'salaried' ? setSalariedLedgerYear : setCasualLedgerYear;
+    return (
+      <View style={detS.section} key={kind}>
+        <View style={detS.sectionHeader}>
+          <Text style={detS.sectionTitle}>{title}</Text>
+          {loading && <ActivityIndicator size="small" color={accentColor} />}
+        </View>
+        <YearSelector year={year} onChange={setYear} />
+
+        {!loading && ledger && (
+          <View style={detS.ledgerTable}>
+            <View style={detS.ledgerHeaderRow}>
+              <Text style={[detS.ledgerCell, detS.ledgerMonthCell, detS.ledgerHeaderText]}>Month</Text>
+              <Text style={[detS.ledgerCell, detS.ledgerHeaderText]}>Earned</Text>
+              <Text style={[detS.ledgerCell, detS.ledgerHeaderText]}>Paid</Text>
+              <Text style={[detS.ledgerCell, detS.ledgerHeaderText]}>Balance</Text>
+            </View>
+            {ledger.months.map(m => (
+              editingKind === kind && editingMonth === m.month ? (
+                <View key={m.month} style={detS.ledgerEditRow}>
+                  <Text style={[detS.ledgerCell, detS.ledgerMonthCell]}>{MONTH_ABBR[m.month - 1]}</Text>
+                  <TextInput
+                    style={detS.ledgerEditInput}
+                    value={rowEarned}
+                    onChangeText={setRowEarned}
+                    keyboardType="numeric"
+                    editable={kind === 'salaried'}
+                    selectTextOnFocus
+                  />
+                  <TextInput
+                    style={detS.ledgerEditInput}
+                    value={rowPaid}
+                    onChangeText={setRowPaid}
+                    keyboardType="numeric"
+                    selectTextOnFocus
+                  />
+                  <View style={detS.ledgerEditActions}>
+                    <TouchableOpacity onPress={cancelEditRow} hitSlop={6} disabled={savingRow}>
+                      <Feather name="x" size={16} color="#888" />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={handleSaveRow} hitSlop={6} disabled={savingRow}>
+                      {savingRow
+                        ? <ActivityIndicator size="small" color={accentColor} />
+                        : <Feather name="check" size={16} color={accentColor} />}
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  key={m.month}
+                  style={detS.ledgerRow}
+                  activeOpacity={0.6}
+                  onPress={() => requireActive(() => startEditRow(kind, m))}
+                >
+                  <Text style={[detS.ledgerCell, detS.ledgerMonthCell]}>{MONTH_ABBR[m.month - 1]}</Text>
+                  <Text style={detS.ledgerCell}>{Number(m.earned).toLocaleString()}</Text>
+                  <Text style={detS.ledgerCell}>{Number(m.paid).toLocaleString()}</Text>
+                  <Text style={[detS.ledgerCell, { fontWeight: '700' }]}>{Number(m.balance).toLocaleString()}</Text>
+                </TouchableOpacity>
+              )
+            ))}
+          </View>
+        )}
+
+        {!loading && !ledger && (
+          <Text style={detS.noInfo}>No ledger data available.</Text>
+        )}
+      </View>
+    );
+  }
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -610,7 +710,7 @@ function EmployeeDetailModal({
             onPress={() => requireActive(startEdit)}
           >
             <View style={{ position: 'relative' }}>
-              <View style={[detS.avatarWrap, { backgroundColor: isSalaried ? '#e8f5ef' : '#f3e8ff' }]}>
+              <View style={[detS.avatarWrap, { backgroundColor: accentBg }]}>
                 {photoUri
                   ? <Image source={{ uri: photoUri }} style={detS.avatar} />
                   : <Text style={[detS.initials, { color: accentColor }]}>
@@ -625,11 +725,11 @@ function EmployeeDetailModal({
             </View>
             <Text style={detS.name}>{employee.fullName}</Text>
             <View style={detS.badgeRow}>
-              <View style={[detS.badge, { backgroundColor: isSalaried ? '#e8f5ef' : '#f3e8ff' }]}>
+              <View style={[detS.badge, { backgroundColor: accentBg }]}>
                 <Text style={[detS.badgeText, { color: accentColor }]}>{displayLs(employee.lsNumber)}</Text>
               </View>
               <View style={[detS.badge, { backgroundColor: '#f3f3f3' }]}>
-                <Text style={[detS.badgeText, { color: '#888' }]}>{isSalaried ? 'Salaried' : 'Casual'}</Text>
+                <Text style={[detS.badgeText, { color: '#888' }]}>{typeLabel}</Text>
               </View>
             </View>
           </TouchableOpacity>
@@ -673,7 +773,7 @@ function EmployeeDetailModal({
                 <DateField value={efStart} onChange={setEfStart} placeholder={TODAY} style={detS.fieldInput} accentColor={accentColor} />
                 <Text style={detS.fieldLabel}>Job Title</Text>
                 <TextInput style={detS.fieldInput} value={efJobTitle} onChangeText={setEfJobTitle} placeholder="e.g. Herdsman" placeholderTextColor="#bbb" maxLength={100} />
-                {!isSalaried && (
+                {isCasual && (
                   <>
                     <Text style={detS.fieldLabel}>Default Daily Rate (Ksh)</Text>
                     <TextInput style={detS.fieldInput} value={efRate} onChangeText={setEfRate} keyboardType="numeric" placeholder="150" placeholderTextColor="#bbb" maxLength={10} />
@@ -714,90 +814,45 @@ function EmployeeDetailModal({
             </TouchableOpacity>
           </View>
 
-          {/* Summary cards — leading spacer keeps these aligned with the ledger table's columns below */}
-          <View style={detS.cards}>
-            <View style={{ flex: 1 }} />
-            {[
-              { label: 'All-time Earned', value: earned, color: '#D8F3DC' },
-              { label: 'Total Paid',      value: paid,     color: '#DBEAFE' },
-              { label: 'Outstanding',     value: outstanding, color: '#EDE9FE' },
-            ].map(({ label, value, color }) => (
-              <View key={label} style={[detS.card, { backgroundColor: color }]}>
-                <Text style={detS.cardLabel}>{label}</Text>
-                <Text style={detS.cardValue}>
-                  {loadingSum ? '…' : `Ksh ${Number(value).toLocaleString()}`}
-                </Text>
-              </View>
-            ))}
-          </View>
-
-          {/* Annual Ledger — tap a month to edit; casual Earned is read-only (computed from work sessions) */}
-          <View style={detS.section}>
-            <View style={detS.sectionHeader}>
-              <Text style={detS.sectionTitle}>Annual Ledger</Text>
-              {loadingLedger && <ActivityIndicator size="small" color={accentColor} />}
-            </View>
-            <YearSelector year={ledgerYear} onChange={setLedgerYear} />
-
-            {!loadingLedger && ledger && (
-              <View style={detS.ledgerTable}>
-                <View style={detS.ledgerHeaderRow}>
-                  <Text style={[detS.ledgerCell, detS.ledgerMonthCell, detS.ledgerHeaderText]}>Month</Text>
-                  <Text style={[detS.ledgerCell, detS.ledgerHeaderText]}>Earned</Text>
-                  <Text style={[detS.ledgerCell, detS.ledgerHeaderText]}>Paid</Text>
-                  <Text style={[detS.ledgerCell, detS.ledgerHeaderText]}>Balance</Text>
+          {/* Summary cards — one row per employment type when the employee is both */}
+          {isSalaried && (
+            <View style={detS.cards}>
+              <View style={{ flex: 1 }} />
+              {[
+                { label: 'Salaried Earned', value: salariedSummary?.allTimeEarned ?? 0, color: '#D8F3DC' },
+                { label: 'Salaried Paid',   value: salariedSummary?.allTimePaid ?? 0,   color: '#DBEAFE' },
+                { label: 'Outstanding',     value: salariedSummary?.outstanding ?? 0,   color: '#EDE9FE' },
+              ].map(({ label, value, color }) => (
+                <View key={label} style={[detS.card, { backgroundColor: color }]}>
+                  <Text style={detS.cardLabel}>{label}</Text>
+                  <Text style={detS.cardValue}>
+                    {loadingSum ? '…' : `Ksh ${Number(value).toLocaleString()}`}
+                  </Text>
                 </View>
-                {ledger.months.map(m => (
-                  editingMonth === m.month ? (
-                    <View key={m.month} style={detS.ledgerEditRow}>
-                      <Text style={[detS.ledgerCell, detS.ledgerMonthCell]}>{MONTH_ABBR[m.month - 1]}</Text>
-                      <TextInput
-                        style={detS.ledgerEditInput}
-                        value={rowEarned}
-                        onChangeText={setRowEarned}
-                        keyboardType="numeric"
-                        editable={isSalaried}
-                        selectTextOnFocus
-                      />
-                      <TextInput
-                        style={detS.ledgerEditInput}
-                        value={rowPaid}
-                        onChangeText={setRowPaid}
-                        keyboardType="numeric"
-                        selectTextOnFocus
-                      />
-                      <View style={detS.ledgerEditActions}>
-                        <TouchableOpacity onPress={cancelEditRow} hitSlop={6} disabled={savingRow}>
-                          <Feather name="x" size={16} color="#888" />
-                        </TouchableOpacity>
-                        <TouchableOpacity onPress={handleSaveRow} hitSlop={6} disabled={savingRow}>
-                          {savingRow
-                            ? <ActivityIndicator size="small" color={accentColor} />
-                            : <Feather name="check" size={16} color={accentColor} />}
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  ) : (
-                    <TouchableOpacity
-                      key={m.month}
-                      style={detS.ledgerRow}
-                      activeOpacity={0.6}
-                      onPress={() => requireActive(() => startEditRow(m))}
-                    >
-                      <Text style={[detS.ledgerCell, detS.ledgerMonthCell]}>{MONTH_ABBR[m.month - 1]}</Text>
-                      <Text style={detS.ledgerCell}>{Number(m.earned).toLocaleString()}</Text>
-                      <Text style={detS.ledgerCell}>{Number(m.paid).toLocaleString()}</Text>
-                      <Text style={[detS.ledgerCell, { fontWeight: '700' }]}>{Number(m.balance).toLocaleString()}</Text>
-                    </TouchableOpacity>
-                  )
-                ))}
-              </View>
-            )}
+              ))}
+            </View>
+          )}
+          {isCasual && (
+            <View style={detS.cards}>
+              <View style={{ flex: 1 }} />
+              {[
+                { label: 'Casual Earned', value: casualSummary?.allTimeEarned ?? 0, color: '#D8F3DC' },
+                { label: 'Casual Paid',   value: casualSummary?.allTimePaid ?? 0,   color: '#DBEAFE' },
+                { label: 'Outstanding',   value: casualSummary?.outstanding ?? 0,   color: '#EDE9FE' },
+              ].map(({ label, value, color }) => (
+                <View key={label} style={[detS.card, { backgroundColor: color }]}>
+                  <Text style={detS.cardLabel}>{label}</Text>
+                  <Text style={detS.cardValue}>
+                    {loadingSum ? '…' : `Ksh ${Number(value).toLocaleString()}`}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
 
-            {!loadingLedger && !ledger && (
-              <Text style={detS.noInfo}>No ledger data available.</Text>
-            )}
-          </View>
+          {/* Annual Ledger(s) — tap a month to edit; casual Earned is read-only (computed from work sessions) */}
+          {isSalaried && renderLedgerBlock('salaried')}
+          {isCasual && renderLedgerBlock('casual')}
         </ScrollView>
       </SafeAreaView>
     </Modal>
@@ -927,7 +982,7 @@ export default function WorkersScreen() {
 
   useEffect(() => {
     if (!farmId) return;
-    getEmployees(farmId, { employmentType: 'CASUAL', size: 1 })
+    getEmployees(farmId, { isCasual: true, size: 1 })
       .then(res => setHasCasuals(res.totalElements > 0))
       .catch(() => {});
   }, [farmId]);
@@ -958,7 +1013,8 @@ export default function WorkersScreen() {
                 firstName: employee.firstName,
                 lastName: employee.lastName,
                 phone: employee.phone,
-                employmentType: employee.employmentType,
+                isSalaried: employee.isSalaried,
+                isCasual: employee.isCasual,
                 jobTitle: employee.jobTitle,
                 nationalId: employee.nationalId,
                 gender: employee.gender,

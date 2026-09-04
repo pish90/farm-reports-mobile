@@ -147,7 +147,8 @@ export interface EmployeeDto {
   lastName: string | null;
   fullName: string;
   phone: string | null;
-  employmentType: 'SALARIED' | 'CASUAL';
+  isSalaried: boolean;
+  isCasual: boolean;
   jobTitle: string | null;
   departmentName: string | null;
   startDate: string | null;
@@ -165,7 +166,8 @@ export interface EmployeeRequest {
   firstName: string;
   lastName?: string | null;
   phone?: string | null;
-  employmentType: 'SALARIED' | 'CASUAL';
+  isSalaried: boolean;
+  isCasual: boolean;
   jobTitle?: string | null;
   startDate?: string | null;
   dateOfBirth?: string | null;

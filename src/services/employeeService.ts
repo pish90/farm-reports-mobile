@@ -11,15 +11,17 @@ import {
 export async function getEmployees(
   farmId: number,
   opts: {
-    employmentType?: 'SALARIED' | 'CASUAL';
+    isSalaried?: boolean;
+    isCasual?: boolean;
     search?: string;
     status?: string;
     page?: number;
     size?: number;
   } = {},
 ): Promise<PageDto<EmployeeDto>> {
-  const params: Record<string, string | number> = {};
-  if (opts.employmentType) params.employmentType = opts.employmentType;
+  const params: Record<string, string | number | boolean> = {};
+  if (opts.isSalaried !== undefined) params.isSalaried = opts.isSalaried;
+  if (opts.isCasual !== undefined) params.isCasual = opts.isCasual;
   if (opts.search) params.search = opts.search;
   if (opts.status) params.status = opts.status;
   if (opts.page !== undefined) params.page = opts.page;

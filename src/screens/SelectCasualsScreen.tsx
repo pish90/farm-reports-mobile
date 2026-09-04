@@ -49,7 +49,7 @@ export default function SelectCasualsScreen() {
   const fetchPage = useCallback((page: number) => {
     if (!user?.farmId) return;
     if (page === 0) setLoading(true); else setLoadingMore(true);
-    getEmployees(user.farmId, { status: 'ACTIVE', search: debouncedSearch || undefined, page, size: PAGE_SIZE })
+    getEmployees(user.farmId, { isCasual: true, status: 'ACTIVE', search: debouncedSearch || undefined, page, size: PAGE_SIZE })
       .then(res => {
         setTotalElements(res.totalElements);
         setEmployees(prev => page === 0 ? res.content : [...prev, ...res.content]);
@@ -135,7 +135,11 @@ export default function SelectCasualsScreen() {
           }
           renderItem={({ item }) => {
             const isChecked = checked.has(item.id);
-            const isSalaried = item.employmentType === 'SALARIED';
+            // Every row here is already casual-eligible (filtered server-side); the only
+            // remaining distinction to show is whether they're also salaried (dual-type).
+            const isDual = item.isSalaried && item.isCasual;
+            const accentColor = isDual ? '#0f766e' : '#7c3aed';
+            const accentBg = isDual ? '#ccfbf1' : '#f3e8ff';
             const photoUri = item.photoBase64
               ? `data:${item.photoMimeType ?? 'image/jpeg'};base64,${item.photoBase64}`
               : null;
@@ -146,17 +150,17 @@ export default function SelectCasualsScreen() {
                 activeOpacity={0.75}
               >
                 <View style={styles.rowLeft}>
-                  <View style={[styles.avatarPlaceholder, { backgroundColor: isSalaried ? '#e8f5ef' : '#f3e8ff' }]}>
+                  <View style={[styles.avatarPlaceholder, { backgroundColor: accentBg }]}>
                     {photoUri
                       ? <Image source={{ uri: photoUri }} style={styles.avatar} />
-                      : <Text style={[styles.avatarInitial, { color: isSalaried ? '#2d6a4f' : '#7c3aed' }]}>
+                      : <Text style={[styles.avatarInitial, { color: accentColor }]}>
                           {item.fullName[0].toUpperCase()}
                         </Text>}
                   </View>
                   <View style={{ flex: 1, marginLeft: 12 }}>
                     <Text style={styles.rowName}>{item.fullName}</Text>
-                    <Text style={[styles.rowLs, { color: isSalaried ? '#2d6a4f' : '#7c3aed' }]}>
-                      {item.lsNumber}{isSalaried ? '' : '  ·  Casual'}
+                    <Text style={[styles.rowLs, { color: accentColor }]}>
+                      {item.lsNumber}{isDual ? '  ·  Salaried + Casual' : ''}
                     </Text>
                   </View>
                 </View>
