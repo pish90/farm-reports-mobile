@@ -88,18 +88,6 @@ const rowStyles = StyleSheet.create({
 
 // ─── Completion logic ─────────────────────────────────────────────────────────
 
-function attendanceStatus(s: SectionSummary['attendance']): StatusColor {
-  if (s.workerCount === 0) return 'grey';
-  if (s.markedSlots === 0) return 'red';
-  if (s.markedSlots < s.totalSlots) return 'amber';
-  return 'green';
-}
-
-function attendanceDetail(s: SectionSummary['attendance']): string {
-  if (s.workerCount === 0) return 'Not configured';
-  return `${s.workerCount} worker${s.workerCount !== 1 ? 's' : ''}  ·  ${s.markedSlots} of ${s.totalSlots} slots marked`;
-}
-
 function livestockStatus(s: SectionSummary['livestock']): StatusColor {
   return s.nonZeroCount > 0 ? 'green' : 'red';
 }
@@ -296,11 +284,6 @@ export default function SummaryScreen() {
           {/* Section status card */}
           <Text style={styles.sectionHeading}>SECTION STATUS</Text>
           <View style={styles.card}>
-            <StatusRow
-              label="Attendance"
-              detail={attendanceDetail(summary.attendance)}
-              status={attendanceStatus(summary.attendance)}
-            />
             <StatusRow
               label="Livestock Returns"
               detail={livestockDetail(summary.livestock)}

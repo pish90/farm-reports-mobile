@@ -1,4 +1,4 @@
-import { getDb, remapAttendanceWorkerIds } from '../db/database';
+import { getDb } from '../db/database';
 import apiClient from './apiClient';
 
 export interface WorkerDto {
@@ -57,7 +57,6 @@ export async function getWorkers(farmId: number): Promise<WorkerDto[]> {
     const res = await apiClient.get(`/farms/${farmId}/workers`);
     const workers: WorkerDto[] = res.data.data;
     setCachedWorkers(farmId, workers).catch(() => {});
-    await remapAttendanceWorkerIds(workers); // fix stale IDs left by V29 migration
     return workers;
   } catch {
     const cached = await getCachedWorkers(farmId);

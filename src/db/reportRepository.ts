@@ -15,21 +15,9 @@ export interface LocalReport {
 }
 
 export interface SectionSummary {
-  attendance: { workerCount: number; markedSlots: number; totalSlots: number };
   livestock:  { totalTypes: number; nonZeroCount: number };
   milk:       { filledDays: number; daysInMonth: number };
   expenses:   { count: number; total: number };
-}
-
-export interface LocalAttendanceRecord {
-  id: number;
-  report_id: number;
-  worker_id: number;
-  worker_name: string;
-  day_of_month: number;
-  present: number; // 0 | 1 — kept for backward compat
-  status: string | null; // 'P' | 'A' | 'AL' | 'SL' | 'PL'
-  notes: string | null;
 }
 
 export interface LocalLivestockRecord {
@@ -76,12 +64,6 @@ export interface LocalExpenseApportionment {
   amount: number;
 }
 
-export interface LocalAttendanceNote {
-  report_id: number;
-  worker_id: number;
-  note: string;
-}
-
 export interface LocalLivestockNote {
   report_id: number;
   category: string;
@@ -98,14 +80,12 @@ export interface SyncQueueEntry {
 
 export interface FullReport {
   report: LocalReport;
-  attendance: LocalAttendanceRecord[];
   livestock: LocalLivestockRecord[];
   milk: LocalMilkRecord[];
   expenses: LocalExpenseRecord[];
 }
 
 // Input types (no id / report_id — provided by caller)
-export type AttendanceInput = Omit<LocalAttendanceRecord, 'id' | 'report_id' | 'present'> & { present: number };
 export type LivestockInput  = Omit<LocalLivestockRecord,  'id' | 'report_id'>;
 export type MilkInput       = Omit<LocalMilkRecord,       'id' | 'report_id'>;
 export type ExpenseInput    = Omit<LocalExpenseRecord, 'id' | 'report_id'> & {
@@ -171,26 +151,6 @@ export async function updateLastSyncedAt(localId: number): Promise<void> {
     "UPDATE local_reports SET last_synced_at = datetime('now') WHERE id = ?",
     [localId],
   );
-}
-
-// ─── Attendance ───────────────────────────────────────────────────────────────
-
-export async function saveAttendance(
-  reportId: number,
-  records: AttendanceInput[],
-): Promise<void> {
-  const db = getDb();
-  await db.withTransactionAsync(async () => {
-    await db.runAsync('DELETE FROM local_attendance WHERE report_id = ?', [reportId]);
-    for (const r of records) {
-      await db.runAsync(
-        `INSERT INTO local_attendance
-           (report_id, worker_id, worker_name, day_of_month, present, status, notes)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [reportId, r.worker_id, r.worker_name, r.day_of_month, r.present, r.status ?? null, r.notes ?? null],
-      );
-    }
-  });
 }
 
 // ─── Livestock ────────────────────────────────────────────────────────────────
@@ -274,24 +234,6 @@ export async function saveExpenses(
   });
 }
 
-export async function saveAttendanceNotes(
-  reportId: number,
-  notes: Array<{ worker_id: number; note: string }>,
-): Promise<void> {
-  const db = getDb();
-  await db.withTransactionAsync(async () => {
-    await db.runAsync('DELETE FROM local_attendance_notes WHERE report_id = ?', [reportId]);
-    for (const n of notes) {
-      if (n.note.trim()) {
-        await db.runAsync(
-          'INSERT OR REPLACE INTO local_attendance_notes (report_id, worker_id, note) VALUES (?, ?, ?)',
-          [reportId, n.worker_id, n.note.trim()],
-        );
-      }
-    }
-  });
-}
-
 export async function saveLivestockNotes(
   reportId: number,
   notes: Array<{ category: string; note: string }>,
@@ -320,11 +262,7 @@ export async function getFullReport(reportId: number): Promise<FullReport | null
   );
   if (!report) return null;
 
-  const [attendance, livestock, milk, expenses] = await Promise.all([
-    db.getAllAsync<LocalAttendanceRecord>(
-      'SELECT * FROM local_attendance WHERE report_id = ? ORDER BY worker_id, day_of_month',
-      [reportId],
-    ),
+  const [livestock, milk, expenses] = await Promise.all([
     db.getAllAsync<LocalLivestockRecord>(
       'SELECT * FROM local_livestock WHERE report_id = ? ORDER BY category, type_name',
       [reportId],
@@ -339,7 +277,7 @@ export async function getFullReport(reportId: number): Promise<FullReport | null
     ),
   ]);
 
-  return { report, attendance, livestock, milk, expenses };
+  return { report, livestock, milk, expenses };
 }
 
 // ─── Submit ───────────────────────────────────────────────────────────────────
@@ -375,13 +313,7 @@ export async function getReportSectionSummary(
   const db = getDb();
   const daysInMonth = new Date(year, month, 0).getDate();
 
-  const [attRow, liveRow, milkRow, expRow] = await Promise.all([
-    db.getFirstAsync<{ worker_count: number; marked_slots: number }>(
-      `SELECT COUNT(DISTINCT worker_id)               AS worker_count,
-              COALESCE(SUM(present), 0)               AS marked_slots
-       FROM local_attendance WHERE report_id = ?`,
-      [reportId],
-    ),
+  const [liveRow, milkRow, expRow] = await Promise.all([
     db.getFirstAsync<{ total_types: number; non_zero: number }>(
       `SELECT COUNT(*)                                          AS total_types,
               COALESCE(SUM(CASE WHEN count > 0 THEN 1 ELSE 0 END), 0) AS non_zero
@@ -401,11 +333,7 @@ export async function getReportSectionSummary(
     ),
   ]);
 
-  const workerCount = attRow?.worker_count ?? 0;
-  const markedSlots = attRow?.marked_slots ?? 0;
-
   return {
-    attendance: { workerCount, markedSlots, totalSlots: workerCount * daysInMonth },
     livestock:  { totalTypes: liveRow?.total_types ?? 0, nonZeroCount: liveRow?.non_zero ?? 0 },
     milk:       { filledDays: milkRow?.filled_days ?? 0, daysInMonth },
     expenses:   { count: expRow?.cnt ?? 0, total: expRow?.total ?? 0 },

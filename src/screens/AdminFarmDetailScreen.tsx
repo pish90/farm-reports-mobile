@@ -456,18 +456,6 @@ export default function AdminFarmDetailScreen({ route, navigation }: Props) {
   const expenseTotal = report.expenses.reduce((s, e) => s + e.cost, 0);
   const milkTotal    = report.milk.reduce((s, m) => s + (m.litres ?? 0), 0);
 
-  // Attendance summary: use a Set per worker so duplicate rows don't inflate the count
-  const attendanceByWorker: Record<number, { name: string; presentDays: Set<number> }> = {};
-  for (const a of report.attendance) {
-    if (!attendanceByWorker[a.workerId]) {
-      attendanceByWorker[a.workerId] = { name: a.workerName, presentDays: new Set() };
-    }
-    if (a.present) attendanceByWorker[a.workerId].presentDays.add(a.dayOfMonth);
-  }
-  const daysInMonth = new Date(year, month, 0).getDate();
-  const workerEntries = Object.values(attendanceByWorker)
-    .map(w => ({ name: w.name, present: w.presentDays.size }));
-
   // Livestock by category
   const livestockByCategory: Record<string, { type: string; count: number }[]> = {};
   for (const l of report.livestock) {
@@ -528,21 +516,6 @@ export default function AdminFarmDetailScreen({ route, navigation }: Props) {
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-
-        {/* ── Attendance ────────────────────────────────────────────── */}
-        <SectionHeader title="Attendance" icon="users" />
-        {workerEntries.length === 0 ? (
-          <Text style={styles.emptySection}>No attendance recorded</Text>
-        ) : (
-          workerEntries.map(w => (
-            <View key={w.name} style={styles.attRow}>
-              <Text style={styles.attName}>{w.name}</Text>
-              <Text style={styles.attCount}>
-                {w.present} / {daysInMonth}
-              </Text>
-            </View>
-          ))
-        )}
 
         {/* ── Casual Labour ─────────────────────────────────────────── */}
         {(() => {
@@ -746,9 +719,6 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 14, fontWeight: '700', color: '#1a1a1a', flex: 1 },
   emptySection: { fontSize: 13, color: '#aaa', textAlign: 'center', paddingVertical: 12 },
 
-  // Attendance
-  attRow:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#fff', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#f0f0f0' },
-
   casualSessionCard: {
     backgroundColor: '#fff', borderRadius: 10, marginBottom: 8,
     borderWidth: 1, borderColor: '#ede9fe', overflow: 'hidden',
@@ -771,8 +741,6 @@ const styles = StyleSheet.create({
   casualEntryRate:     { fontSize: 13, fontWeight: '600', color: '#555' },
   casualEntryOverride: { color: '#7c3aed' },
   casualOverrideHint:  { fontSize: 10, color: '#aaa', paddingHorizontal: 12, paddingBottom: 6, fontStyle: 'italic' },
-  attName:  { fontSize: 14, color: '#1a1a1a', flex: 1 },
-  attCount: { fontSize: 14, fontWeight: '700', color: '#2d6a4f', fontVariant: ['tabular-nums'] },
 
   // Livestock
   categoryLabel: { fontSize: 12, fontWeight: '600', color: '#888', textTransform: 'uppercase', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 2 },

@@ -54,15 +54,6 @@ export interface PageDto<T> {
 }
 
 // Server-side report DTOs (returned by admin API)
-export interface ServerAttendanceRecord {
-  id: number;
-  workerId: number;
-  workerName: string;
-  dayOfMonth: number;
-  present: boolean;
-  notes: string | null;
-}
-
 export interface ServerLivestockRecord {
   id: number;
   livestockTypeId: number;
@@ -109,7 +100,6 @@ export interface AdminReport {
   month: number;
   status: 'DRAFT' | 'SUBMITTED';
   submittedAt: string | null;
-  attendance: ServerAttendanceRecord[];
   livestock: ServerLivestockRecord[];
   milk: ServerMilkRecord[];
   expenses: ServerExpense[];
@@ -232,7 +222,7 @@ export interface FarmLiveStatus {
   reportStatus: 'NOT_STARTED' | 'DRAFT' | 'SUBMITTED';
   reportId: number | null;
   activeWorkers: number;
-  attendanceDaysRecorded: number;
+  payrollEntriesRecorded: number;
   milkTotalLitres: number;
   expenseCount: number;
   expenseTotal: number;

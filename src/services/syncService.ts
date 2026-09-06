@@ -46,21 +46,6 @@ async function syncSection(
   if (!full) return;
 
   switch (entry.section) {
-    case 'attendance': {
-      if (full.attendance.length === 0) break; // Never wipe server attendance with an empty payload
-      await apiClient.put(`/reports/${serverReportId}/attendance`, full.attendance.map((a) => {
-        const status = a.status ?? (a.present === 1 ? 'P' : 'A');
-        return {
-          workerId: a.worker_id,
-          dayOfMonth: a.day_of_month,
-          present: status === 'P',
-          status,
-          notes: a.notes ?? null,
-        };
-      }));
-      break;
-    }
-
     case 'livestock':
       await apiClient.put(`/reports/${serverReportId}/livestock`, full.livestock.map((l) => ({
         livestockTypeId: l.livestock_type_id,
@@ -86,17 +71,6 @@ async function syncSection(
         categoryId: e.category_id ?? null,
         businessUnitId: e.business_unit_id ?? null,
       })));
-      break;
-    }
-
-    case 'attendance-notes': {
-      const notes = await getDb().getAllAsync<{ worker_id: number; note: string }>(
-        'SELECT worker_id, note FROM local_attendance_notes WHERE report_id = ?',
-        [localReportId],
-      );
-      await apiClient.put(`/reports/${serverReportId}/attendance-notes`, {
-        notes: notes.map((n) => ({ subjectId: n.worker_id, note: n.note })),
-      });
       break;
     }
 

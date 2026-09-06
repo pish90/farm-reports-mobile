@@ -49,7 +49,7 @@ export default function SelectCasualsScreen() {
   const fetchPage = useCallback((page: number) => {
     if (!user?.farmId) return;
     if (page === 0) setLoading(true); else setLoadingMore(true);
-    getEmployees(user.farmId, { isCasual: true, status: 'ACTIVE', search: debouncedSearch || undefined, page, size: PAGE_SIZE })
+    getEmployees(user.farmId, { status: 'ACTIVE', search: debouncedSearch || undefined, page, size: PAGE_SIZE })
       .then(res => {
         setTotalElements(res.totalElements);
         setEmployees(prev => page === 0 ? res.content : [...prev, ...res.content]);
@@ -135,11 +135,12 @@ export default function SelectCasualsScreen() {
           }
           renderItem={({ item }) => {
             const isChecked = checked.has(item.id);
-            // Every row here is already casual-eligible (filtered server-side); the only
-            // remaining distinction to show is whether they're also salaried (dual-type).
+            // Every active employee at the farm is eligible for a work session, regardless of
+            // their salaried/casual flag — show it when it's not the default "casual" case.
             const isDual = item.isSalaried && item.isCasual;
-            const accentColor = isDual ? '#0f766e' : '#7c3aed';
-            const accentBg = isDual ? '#ccfbf1' : '#f3e8ff';
+            const typeLabel = isDual ? 'Salaried + Casual' : item.isSalaried ? 'Salaried' : null;
+            const accentColor = item.isSalaried ? '#0f766e' : '#7c3aed';
+            const accentBg = item.isSalaried ? '#ccfbf1' : '#f3e8ff';
             const photoUri = item.photoBase64
               ? `data:${item.photoMimeType ?? 'image/jpeg'};base64,${item.photoBase64}`
               : null;
@@ -160,7 +161,7 @@ export default function SelectCasualsScreen() {
                   <View style={{ flex: 1, marginLeft: 12 }}>
                     <Text style={styles.rowName}>{item.fullName}</Text>
                     <Text style={[styles.rowLs, { color: accentColor }]}>
-                      {item.lsNumber}{isDual ? '  ·  Salaried + Casual' : ''}
+                      {item.lsNumber}{typeLabel ? `  ·  ${typeLabel}` : ''}
                     </Text>
                   </View>
                 </View>

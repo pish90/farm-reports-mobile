@@ -69,7 +69,7 @@ function FarmCard({ farm, onPress, onReopen, onManageWorkers, reopening, isOpsMa
 
       <View style={styles.statsRow}>
         <StatCell icon="users"      value={String(farm.activeWorkers)}               label="Workers" />
-        <StatCell icon="calendar"   value={String(farm.attendanceDaysRecorded)}       label="Att. days" />
+        <StatCell icon="calendar"   value={String(farm.payrollEntriesRecorded)}       label="Payroll" />
         <StatCell icon="droplet"    value={farm.milkTotalLitres > 0 ? `${farm.milkTotalLitres.toFixed(0)}L` : '—'} label="Milk" />
         <StatCell icon="tag"        value={farm.livestockEntered ? '✓' : '—'}        label="Livestock" />
         <StatCell
@@ -129,7 +129,6 @@ export default function AdminDashboardScreen() {
   const [error,         setError]         = useState<string | null>(null);
   const [reopeningId,   setReopeningId]   = useState<number | null>(null);
   const [isExporting,   setIsExporting]   = useState(false);
-  const [isBackingUp,   setIsBackingUp]   = useState(false);
 
   const load = useCallback(async (y: number, m: number, refresh = false) => {
     if (refresh) setIsRefreshing(true); else setIsLoading(true);
@@ -171,17 +170,6 @@ export default function AdminDashboardScreen() {
     }
   }
 
-  async function handleBackup() {
-    setIsBackingUp(true);
-    try {
-      await adminService.downloadBackup();
-    } catch {
-      Alert.alert('Backup Failed', 'Could not create the backup. Please check your connection.');
-    } finally {
-      setIsBackingUp(false);
-    }
-  }
-
   const submitted  = farms.filter(f => f.reportStatus === 'SUBMITTED').length;
   const inProgress = farms.filter(f => f.reportStatus === 'DRAFT').length;
   const notStarted = farms.filter(f => f.reportStatus === 'NOT_STARTED').length;
@@ -212,22 +200,6 @@ export default function AdminDashboardScreen() {
                 <>
                   <Feather name="download" size={16} color="#2d6a4f" />
                   <Text style={styles.exportBtnText}>Excel</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          )}
-          {isAdmin && (
-            <TouchableOpacity
-              style={[styles.backupBtn, isBackingUp && styles.exportBtnDisabled]}
-              onPress={handleBackup}
-              disabled={isBackingUp}
-            >
-              {isBackingUp ? (
-                <ActivityIndicator size="small" color="#2d6a4f" />
-              ) : (
-                <>
-                  <Feather name="shield" size={15} color="#2d6a4f" />
-                  <Text style={styles.exportBtnText}>Backup</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -315,11 +287,6 @@ const styles = StyleSheet.create({
   },
   exportBtnDisabled: { opacity: 0.5 },
   exportBtnText: { fontSize: 13, fontWeight: '600', color: '#2d6a4f' },
-  backupBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingHorizontal: 14, paddingVertical: 8,
-    backgroundColor: '#e8f5ef', borderRadius: 20,
-  },
   auditBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
     paddingHorizontal: 12, paddingVertical: 8,
