@@ -71,16 +71,6 @@ export const adminService = {
     return res.data.data;
   },
 
-  async reopenReport(reportId: number): Promise<AdminReport> {
-    const res = await apiClient.post(`/admin/reports/${reportId}/reopen`);
-    return res.data.data;
-  },
-
-  async submitReport(reportId: number, farmId: number): Promise<AdminReport> {
-    const res = await apiClient.post(`/admin/reports/${reportId}/submit`, null, { params: { farmId } });
-    return res.data.data;
-  },
-
   async upsertExpenses(reportId: number, farmId: number, entries: ExpenseEntryPayload[]): Promise<void> {
     await apiClient.put(`/admin/reports/${reportId}/expenses`, entries, { params: { farmId } });
   },

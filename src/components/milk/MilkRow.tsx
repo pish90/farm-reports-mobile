@@ -9,7 +9,6 @@ interface Props {
   month: number;
   year: number;
   control: React.ComponentProps<typeof Controller>['control'];
-  isSubmitted: boolean;
 }
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -29,12 +28,12 @@ function isFutureDate(year: number, month: number, day: number): boolean {
   return new Date(year, month - 1, day) > today;
 }
 
-const MilkRow = React.memo(function MilkRow({ day, month, year, control, isSubmitted }: Props) {
+const MilkRow = React.memo(function MilkRow({ day, month, year, control }: Props) {
   const fieldName = `day_${day}` as keyof MilkFormValues;
   const { errors } = useFormState({ control, name: fieldName });
   const weekend  = isWeekend(year, month, day);
   const future   = isFutureDate(year, month, day);
-  const disabled = future || isSubmitted;
+  const disabled = future;
   const hasError = !!errors[fieldName];
 
   return (

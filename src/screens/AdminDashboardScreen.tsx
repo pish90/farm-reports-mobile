@@ -28,8 +28,7 @@ const MONTHS = [
 function StatusBadge({ status }: { status: FarmLiveStatus['reportStatus'] }) {
   const cfg = {
     NOT_STARTED: { label: 'Not Started', bg: '#f0f0f0', color: '#888' },
-    DRAFT:       { label: 'In Progress', bg: '#FFF8E1', color: '#F59E0B' },
-    SUBMITTED:   { label: 'Submitted',   bg: '#D8F3DC', color: '#2D6A4F' },
+    DRAFT:       { label: 'Recording',   bg: '#D8F3DC', color: '#2D6A4F' },
   }[status];
   return (
     <View style={[styles.badge, { backgroundColor: cfg.bg }]}>
@@ -51,13 +50,11 @@ function StatCell({ icon, value, label }: { icon: keyof typeof Feather.glyphMap;
 interface FarmCardProps {
   farm: FarmLiveStatus;
   onPress: () => void;
-  onReopen: () => void;
   onManageWorkers?: () => void;
-  reopening: boolean;
   isOpsManager: boolean;
 }
 
-function FarmCard({ farm, onPress, onReopen, onManageWorkers, reopening, isOpsManager }: FarmCardProps) {
+function FarmCard({ farm, onPress, onManageWorkers, isOpsManager }: FarmCardProps) {
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.85}>
       <View style={styles.cardHeader}>
@@ -90,22 +87,6 @@ function FarmCard({ farm, onPress, onReopen, onManageWorkers, reopening, isOpsMa
               <Text style={styles.workersBtnText}>Workers</Text>
             </TouchableOpacity>
           )}
-          {farm.reportStatus === 'SUBMITTED' && !isOpsManager && (
-            <TouchableOpacity
-              style={[styles.reopenBtn, reopening && styles.reopenBtnDisabled]}
-              onPress={onReopen}
-              disabled={reopening}
-            >
-              {reopening ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <>
-                  <Feather name="unlock" size={13} color="#fff" />
-                  <Text style={styles.reopenBtnText}>Reopen</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          )}
         </View>
       </View>
     </TouchableOpacity>
@@ -127,7 +108,6 @@ export default function AdminDashboardScreen() {
   const [isLoading,     setIsLoading]     = useState(true);
   const [isRefreshing,  setIsRefreshing]  = useState(false);
   const [error,         setError]         = useState<string | null>(null);
-  const [reopeningId,   setReopeningId]   = useState<number | null>(null);
   const [isExporting,   setIsExporting]   = useState(false);
 
   const load = useCallback(async (y: number, m: number, refresh = false) => {
@@ -146,19 +126,6 @@ export default function AdminDashboardScreen() {
 
   useEffect(() => { load(year, month); }, [year, month]);
 
-  async function handleReopen(farm: FarmLiveStatus) {
-    if (!farm.reportId) return;
-    setReopeningId(farm.farmId);
-    try {
-      await adminService.reopenReport(farm.reportId);
-      await load(year, month);
-    } catch {
-      Alert.alert('Error', 'Failed to reopen report. Please try again.');
-    } finally {
-      setReopeningId(null);
-    }
-  }
-
   async function handleExport() {
     setIsExporting(true);
     try {
@@ -170,9 +137,8 @@ export default function AdminDashboardScreen() {
     }
   }
 
-  const submitted  = farms.filter(f => f.reportStatus === 'SUBMITTED').length;
-  const inProgress = farms.filter(f => f.reportStatus === 'DRAFT').length;
-  const notStarted = farms.filter(f => f.reportStatus === 'NOT_STARTED').length;
+  const recording   = farms.filter(f => f.reportStatus === 'DRAFT').length;
+  const notStarted  = farms.filter(f => f.reportStatus === 'NOT_STARTED').length;
 
   return (
     <View style={styles.container}>
@@ -230,13 +196,8 @@ export default function AdminDashboardScreen() {
         >
           <View style={styles.summaryStrip}>
             <View style={styles.summaryItem}>
-              <Text style={[styles.summaryCount, { color: '#2d6a4f' }]}>{submitted}</Text>
-              <Text style={styles.summaryLabel}>Submitted</Text>
-            </View>
-            <View style={styles.summaryDivider} />
-            <View style={styles.summaryItem}>
-              <Text style={[styles.summaryCount, { color: '#F59E0B' }]}>{inProgress}</Text>
-              <Text style={styles.summaryLabel}>In Progress</Text>
+              <Text style={[styles.summaryCount, { color: '#2d6a4f' }]}>{recording}</Text>
+              <Text style={styles.summaryLabel}>Recording</Text>
             </View>
             <View style={styles.summaryDivider} />
             <View style={styles.summaryItem}>
@@ -257,8 +218,6 @@ export default function AdminDashboardScreen() {
                 year,
                 month,
               })}
-              onReopen={() => handleReopen(farm)}
-              reopening={reopeningId === farm.farmId}
               onManageWorkers={isAdmin ? () => navigation.navigate('Workers', {
                 farmId: farm.farmId,
                 farmName: farm.farmName,
@@ -328,13 +287,6 @@ const styles = StyleSheet.create({
   statCell: { alignItems: 'center', flex: 1 },
   statValue: { fontSize: 13, fontWeight: '700', color: '#1a1a1a', marginTop: 4 },
   statLabel: { fontSize: 10, color: '#888', marginTop: 1 },
-
-  reopenBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    backgroundColor: '#2d6a4f', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16,
-  },
-  reopenBtnDisabled: { opacity: 0.6 },
-  reopenBtnText: { color: '#fff', fontSize: 12, fontWeight: '600' },
 
   workersBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 5,

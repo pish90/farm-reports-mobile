@@ -17,11 +17,9 @@ import MilkRow, { MilkFormValues, ROW_HEIGHT } from '../../components/milk/MilkR
 import MonthYearSelector from '../../components/shared/MonthYearSelector';
 import { getDb } from '../../db/database';
 import {
-  getLocalReport,
   getOrCreateLocalReport,
   markSectionDirty,
   saveMilk,
-  updateReportSubmitted,
   updateServerReportId,
 } from '../../db/reportRepository';
 import apiClient from '../../services/apiClient';
@@ -149,7 +147,6 @@ export default function MilkScreen() {
   const [localReportId, setLocalReportId] = useState<number | null>(null);
   const [loadError,     setLoadError]     = useState<string | null>(null);
   const [isLoaded,      setIsLoaded]      = useState(false);
-  const [isSubmitted,   setIsSubmitted]   = useState(false);
   const [saveState,     setSaveState]     = useState<SaveState>('idle');
 
   const debounceRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -217,17 +214,11 @@ export default function MilkScreen() {
                 })),
               );
             }
-            if (serverReport.status === 'SUBMITTED') {
-              await updateReportSubmitted(report.id, 'server');
-            }
           }
         } catch {
           // Offline or report not found — use local DB
         }
       }
-
-      const refreshed = (await getLocalReport(report.id)) ?? report;
-      setIsSubmitted(refreshed.status === 'submitted');
 
       const rows = await db.getAllAsync<{ day_of_month: number; litres: number }>(
         'SELECT day_of_month, litres FROM local_milk WHERE report_id = ?',
@@ -274,7 +265,7 @@ export default function MilkScreen() {
   );
 
   useEffect(() => {
-    if (!isLoaded || !localReportId || isSubmitted) return;
+    if (!isLoaded || !localReportId) return;
 
     if (skipSaveRef.current) {
       skipSaveRef.current = false;
@@ -299,10 +290,9 @@ export default function MilkScreen() {
         month={month}
         year={year}
         control={control}
-        isSubmitted={isSubmitted}
       />
     ),
-    [control, month, year, isSubmitted],
+    [control, month, year],
   );
 
   const getItemLayout = useCallback(
@@ -335,14 +325,6 @@ export default function MilkScreen() {
         month={month}
         onChange={(y, m) => { setYear(y); setMonth(m); }}
       />
-
-      {/* Submitted banner */}
-      {isSubmitted && (
-        <View style={styles.submittedBanner}>
-          <Feather name="lock" size={13} color="#fff" style={{ marginRight: 6 }} />
-          <Text style={styles.submittedText}>Report Submitted — Read Only</Text>
-        </View>
-      )}
 
       {/* Save status */}
       <View style={styles.statusBar}>
@@ -396,8 +378,6 @@ export default function MilkScreen() {
 
 const styles = StyleSheet.create({
   container:       { flex: 1, backgroundColor: '#f5f7f9' },
-  submittedBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#2d6a4f', paddingVertical: 6 },
-  submittedText:   { fontSize: 12, fontWeight: '600', color: '#fff' },
   statusBar: {
     flexDirection: 'row',
     alignItems: 'center',

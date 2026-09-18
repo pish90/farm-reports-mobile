@@ -102,9 +102,6 @@ async function syncSection(
       break;
     }
 
-    case 'submit':
-      await apiClient.post(`/reports/${serverReportId}/submit`, {});
-      break;
   }
 
   await markSectionSynced(entry.id);

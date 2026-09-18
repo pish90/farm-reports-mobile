@@ -77,7 +77,6 @@ export default function ExpensesScreen() {
   const [expenses,      setExpenses]      = useState<ExpenseWithApports[]>([]);
   const [loadError,     setLoadError]     = useState<string | null>(null);
   const [isLoaded,      setIsLoaded]      = useState(false);
-  const [isSubmitted,   setIsSubmitted]   = useState(false);
 
   const [formVisible,    setFormVisible]    = useState(false);
   const [editingExpense, setEditingExpense] = useState<ExpenseWithApports | null>(null);
@@ -97,7 +96,6 @@ export default function ExpensesScreen() {
     async function load() {
       const report = await getOrCreateLocalReport(user!.farmId!, year, month);
       setLocalReportId(report.id);
-      setIsSubmitted(report.status === 'submitted');
 
       // Pull from server when local is empty and no local-edit is pending
       if (report.server_report_id) {
@@ -136,9 +134,6 @@ export default function ExpensesScreen() {
                     amount: Number(ap.amount),
                   })),
                 })));
-              }
-              if (res.data.data?.status === 'SUBMITTED') {
-                setIsSubmitted(true);
               }
             } catch {
               // Server unreachable — continue with local data
@@ -262,7 +257,7 @@ export default function ExpensesScreen() {
   // ── Save ──────────────────────────────────────────────────────────────────
   const handleSave = useCallback(
     async (values: ExpenseFormValues) => {
-      if (!localReportId || isSubmitted) return;
+      if (!localReportId) return;
       setFormVisible(false);
 
       const day  = parseInt(values.day, 10);
@@ -329,7 +324,7 @@ export default function ExpensesScreen() {
   // ── Delete ────────────────────────────────────────────────────────────────
   const handleDelete = useCallback(
     async (expense: LocalExpenseRecord) => {
-      if (!localReportId || isSubmitted) return;
+      if (!localReportId) return;
       const filtered = expenses
         .filter((e) => e.id !== expense.id)
         .map((e, i) => ({ ...e, entry_no: i + 1 }));
@@ -369,12 +364,6 @@ export default function ExpensesScreen() {
         </View>
       ) : (
         <>
-          {isSubmitted && (
-            <View style={styles.submittedBanner}>
-              <Feather name="lock" size={13} color="#fff" style={{ marginRight: 6 }} />
-              <Text style={styles.submittedText}>Report Submitted — Read Only</Text>
-            </View>
-          )}
           <FlatList
             data={expenses}
             renderItem={renderItem}
@@ -398,11 +387,9 @@ export default function ExpensesScreen() {
             keyboardShouldPersistTaps="handled"
           />
 
-          {!isSubmitted && (
-            <TouchableOpacity style={styles.fab} onPress={openAdd} activeOpacity={0.85}>
-              <Feather name="plus" size={28} color="#fff" />
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity style={styles.fab} onPress={openAdd} activeOpacity={0.85}>
+            <Feather name="plus" size={28} color="#fff" />
+          </TouchableOpacity>
         </>
       )}
 
@@ -455,8 +442,6 @@ export default function ExpensesScreen() {
 
 const styles = StyleSheet.create({
   container:       { flex: 1, backgroundColor: '#f5f7f9' },
-  submittedBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#2d6a4f', paddingVertical: 6 },
-  submittedText:   { fontSize: 12, fontWeight: '600', color: '#fff' },
   centered:        { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   errorText:       { marginTop: 12, color: '#e53e3e', textAlign: 'center', fontSize: 14 },
   listContent:     { paddingBottom: 100 },

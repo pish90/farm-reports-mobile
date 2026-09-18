@@ -14,12 +14,10 @@ import MonthYearSelector from '../../components/shared/MonthYearSelector';
 import { LivestockFormValues } from '../../components/livestock/LivestockSection';
 import LivestockSection from '../../components/livestock/LivestockSection';
 import {
-  getLocalReport,
   getOrCreateLocalReport,
   markSectionDirty,
   saveLivestock,
   saveLivestockNotes,
-  updateReportSubmitted,
   updateServerReportId,
 } from '../../db/reportRepository';
 import apiClient from '../../services/apiClient';
@@ -54,7 +52,6 @@ export default function LivestockScreen() {
   const [localReportId,  setLocalReportId]  = useState<number | null>(null);
   const [loadError,      setLoadError]      = useState<string | null>(null);
   const [isLoaded,       setIsLoaded]       = useState(false);
-  const [isSubmitted,    setIsSubmitted]    = useState(false);
   const [saveState,      setSaveState]      = useState<SaveState>('idle');
   const [categoryNotes,  setCategoryNotes]  = useState<Record<string, string>>({});
 
@@ -117,17 +114,11 @@ export default function LivestockScreen() {
                 })),
               );
             }
-            if (serverReport.status === 'SUBMITTED') {
-              await updateReportSubmitted(report.id, 'server');
-            }
           }
         } catch {
           // Offline or report not found — use local DB
         }
       }
-
-      const refreshed = (await getLocalReport(report.id)) ?? report;
-      setIsSubmitted(refreshed.status === 'submitted');
 
       // Load existing livestock data for this report
       const rows = await db.getAllAsync<{ livestock_type_id: number; count: number }>(
@@ -193,7 +184,7 @@ export default function LivestockScreen() {
   );
 
   useEffect(() => {
-    if (!isLoaded || !localReportId || !grouped || isSubmitted) return;
+    if (!isLoaded || !localReportId || !grouped) return;
 
     if (skipSaveRef.current) {
       skipSaveRef.current = false;
@@ -256,12 +247,6 @@ export default function LivestockScreen() {
           keyboardShouldPersistTaps="handled"
           automaticallyAdjustKeyboardInsets
         >
-          {isSubmitted && (
-            <View style={styles.submittedBanner}>
-              <Feather name="lock" size={13} color="#fff" style={{ marginRight: 6 }} />
-              <Text style={styles.submittedText}>Report Submitted — Read Only</Text>
-            </View>
-          )}
           {orderedCategories.map((category) => (
             <LivestockSection
               key={category}
@@ -270,7 +255,6 @@ export default function LivestockScreen() {
               control={control}
               errors={errors}
               watch={watch}
-              isSubmitted={isSubmitted}
               note={categoryNotes[category] ?? ''}
               onNoteChange={handleNoteChange}
             />
@@ -285,8 +269,6 @@ export default function LivestockScreen() {
 const styles = StyleSheet.create({
   container:       { flex: 1, backgroundColor: '#f5f7f9' },
   scroll:          { paddingBottom: 16 },
-  submittedBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#2d6a4f', paddingVertical: 6, marginBottom: 4 },
-  submittedText:   { fontSize: 12, fontWeight: '600', color: '#fff' },
   statusBar: {
     flexDirection: 'row',
     alignItems: 'center',

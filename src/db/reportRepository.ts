@@ -280,29 +280,6 @@ export async function getFullReport(reportId: number): Promise<FullReport | null
   return { report, livestock, milk, expenses };
 }
 
-// ─── Submit ───────────────────────────────────────────────────────────────────
-
-export async function updateReportSubmitted(
-  reportId: number,
-  submittedBy: string,
-): Promise<void> {
-  await getDb().runAsync(
-    `UPDATE local_reports
-     SET status = 'submitted', submitted_at = datetime('now'), submitted_by = ?
-     WHERE id = ?`,
-    [submittedBy, reportId],
-  );
-}
-
-export async function updateReportDraft(reportId: number): Promise<void> {
-  await getDb().runAsync(
-    `UPDATE local_reports
-     SET status = 'draft', submitted_at = NULL, submitted_by = NULL
-     WHERE id = ?`,
-    [reportId],
-  );
-}
-
 // ─── Section summary ──────────────────────────────────────────────────────────
 
 export async function getReportSectionSummary(

@@ -98,8 +98,6 @@ export interface AdminReport {
   farmId: number;
   year: number;
   month: number;
-  status: 'DRAFT' | 'SUBMITTED';
-  submittedAt: string | null;
   livestock: ServerLivestockRecord[];
   milk: ServerMilkRecord[];
   expenses: ServerExpense[];
@@ -219,7 +217,7 @@ export interface FarmLiveStatus {
   farmName: string;
   year: number;
   month: number;
-  reportStatus: 'NOT_STARTED' | 'DRAFT' | 'SUBMITTED';
+  reportStatus: 'NOT_STARTED' | 'DRAFT';
   reportId: number | null;
   activeWorkers: number;
   payrollEntriesRecorded: number;

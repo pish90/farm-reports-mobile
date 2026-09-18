@@ -10,16 +10,10 @@ import {
 } from 'react-native';
 import MonthYearSelector from '../components/shared/MonthYearSelector';
 import {
-  LocalReport,
   SectionSummary,
-  getLocalReport,
   getOrCreateLocalReport,
   getReportSectionSummary,
-  updateReportDraft,
-  updateReportSubmitted,
 } from '../db/reportRepository';
-import apiClient from '../services/apiClient';
-import { syncReport } from '../services/syncService';
 import { useAuth } from '../store/AuthContext';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -39,16 +33,6 @@ const ICON: Record<StatusColor, keyof typeof Feather.glyphMap> = {
   red:   'x-circle',
   grey:  'minus-circle',
 };
-
-function formatDate(iso: string | null): string {
-  if (!iso) return '';
-  // SQLite stores UTC as "YYYY-MM-DD HH:MM:SS"
-  const d = new Date(iso.replace(' ', 'T') + 'Z');
-  return d.toLocaleString(undefined, {
-    year: 'numeric', month: 'long', day: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  });
-}
 
 // ─── StatusRow ────────────────────────────────────────────────────────────────
 
@@ -121,23 +105,16 @@ export default function SummaryScreen() {
   const [year,  setYear]  = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
 
-  const [report,      setReport]      = useState<LocalReport | null>(null);
   const [summary,     setSummary]     = useState<SectionSummary | null>(null);
   const [isLoading,   setIsLoading]   = useState(true);
   const [loadError,   setLoadError]   = useState<string | null>(null);
-  const [isSubmitting,  setIsSubmitting]  = useState(false);
-  const [submitError,   setSubmitError]   = useState<string | null>(null);
-  const [isReopening,   setIsReopening]   = useState(false);
-  const [reopenError,   setReopenError]   = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!user) return;
     setIsLoading(true);
     setLoadError(null);
-    setSubmitError(null);
     try {
       const r = await getOrCreateLocalReport(user.farmId!, year, month);
-      setReport(r);
       const s = await getReportSectionSummary(r.id, year, month);
       setSummary(s);
     } catch (e: any) {
@@ -149,120 +126,6 @@ export default function SummaryScreen() {
 
   useEffect(() => { load(); }, [load]);
 
-  async function handleSubmit() {
-    if (!report || !user) return;
-    setIsSubmitting(true);
-    setSubmitError(null);
-    try {
-      // 1. Push all pending sections to the server
-      await syncReport(report.id);
-
-      // 2. Get updated local report (now has server_report_id)
-      const updated = await getLocalReport(report.id);
-      if (!updated?.server_report_id) {
-        throw new Error('Could not reach the server. Please check your connection and try again.');
-      }
-
-      // 3. Submit on the server
-      await apiClient.post(`/reports/${updated.server_report_id}/submit`, {});
-
-      // 4. Mark local report as submitted
-      await updateReportSubmitted(report.id, user.userName);
-
-      // 5. Reload to reflect new status
-      const final = await getLocalReport(report.id);
-      setReport(final);
-    } catch (e: any) {
-      const msg =
-        e.response?.data?.message ??
-        e.message ??
-        'Submit failed. Please try again.';
-      setSubmitError(msg);
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
-
-  async function handleReopen() {
-    if (!report || !user) return;
-    setIsReopening(true);
-    setReopenError(null);
-    try {
-      if (report.server_report_id) {
-        await apiClient.post(`/reports/${report.server_report_id}/reopen`, {});
-      }
-      await updateReportDraft(report.id);
-      const updated = await getLocalReport(report.id);
-      setReport(updated);
-    } catch (e: any) {
-      const msg = e.response?.data?.message ?? e.message ?? 'Reopen failed. Please try again.';
-      setReopenError(msg);
-    } finally {
-      setIsReopening(false);
-    }
-  }
-
-  // ── Derived state ──────────────────────────────────────────────────────────
-  const isSubmitted = report?.status === 'submitted';
-  const canSubmit =
-    !isSubmitted &&
-    !!summary &&
-    summary.livestock.nonZeroCount > 0 &&
-    summary.milk.filledDays > 0 &&
-    !isSubmitting;
-
-  // ── Submitted view ─────────────────────────────────────────────────────────
-  if (!isLoading && isSubmitted && report) {
-    return (
-      <View style={styles.container}>
-        <MonthYearSelector year={year} month={month} onChange={(y, m) => { setYear(y); setMonth(m); }} />
-        <View style={styles.successContainer}>
-          <View style={styles.successIcon}>
-            <Feather name="check" size={48} color="#fff" />
-          </View>
-          <Text style={styles.successTitle}>Report Submitted</Text>
-          <Text style={styles.successSub}>
-            {formatDate(report.submitted_at)}
-          </Text>
-          {report.submitted_by ? (
-            <Text style={styles.successBy}>by {report.submitted_by}</Text>
-          ) : null}
-
-          <View style={styles.lockedNote}>
-            <Feather name="lock" size={14} color="#888" style={{ marginRight: 6 }} />
-            <Text style={styles.lockedText}>This report is locked and read-only.</Text>
-          </View>
-
-          {user?.role === 'ADMIN' && (
-            <>
-              {reopenError ? (
-                <View style={[styles.lockedNote, { marginTop: 12, borderColor: '#fed7d7', backgroundColor: '#fff5f5' }]}>
-                  <Text style={[styles.lockedText, { color: '#e53e3e' }]}>{reopenError}</Text>
-                </View>
-              ) : null}
-              <TouchableOpacity
-                style={styles.reopenBtn}
-                onPress={handleReopen}
-                disabled={isReopening}
-                activeOpacity={0.8}
-              >
-                {isReopening ? (
-                  <ActivityIndicator size="small" color="#2d6a4f" />
-                ) : (
-                  <>
-                    <Feather name="unlock" size={16} color="#2d6a4f" style={{ marginRight: 8 }} />
-                    <Text style={styles.reopenText}>Reopen Report</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            </>
-          )}
-        </View>
-      </View>
-    );
-  }
-
-  // ── Normal view ────────────────────────────────────────────────────────────
   return (
     <View style={styles.container}>
       <MonthYearSelector year={year} month={month} onChange={(y, m) => { setYear(y); setMonth(m); }} />
@@ -313,35 +176,9 @@ export default function SummaryScreen() {
             ))}
           </View>
 
-          {/* Submit button */}
-          {submitError ? (
-            <View style={styles.errorCard}>
-              <Feather name="alert-circle" size={16} color="#e53e3e" style={{ marginRight: 8 }} />
-              <Text style={styles.errorCardText}>{submitError}</Text>
-            </View>
-          ) : null}
-
-          <TouchableOpacity
-            style={[styles.submitBtn, !canSubmit && styles.submitBtnDisabled]}
-            onPress={handleSubmit}
-            disabled={!canSubmit}
-            activeOpacity={0.8}
-          >
-            {isSubmitting ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <>
-                <Feather name="send" size={18} color="#fff" style={{ marginRight: 8 }} />
-                <Text style={styles.submitText}>Submit Report</Text>
-              </>
-            )}
-          </TouchableOpacity>
-
-          {!canSubmit && !isSubmitted && (
-            <Text style={styles.hint}>
-              Livestock and milk sections must have data before submitting.
-            </Text>
-          )}
+          <Text style={styles.hint}>
+            Data is live as soon as it's entered — nothing to submit.
+          </Text>
         </ScrollView>
       ) : null}
     </View>
@@ -385,79 +222,11 @@ const styles = StyleSheet.create({
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   legendText: { fontSize: 12, color: '#888' },
 
-  errorCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginHorizontal: 16,
-    marginTop: 20,
-    padding: 12,
-    backgroundColor: '#fff5f5',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#fed7d7',
-  },
-  errorCardText: { flex: 1, fontSize: 13, color: '#e53e3e' },
-
-  submitBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginHorizontal: 16,
-    marginTop: 24,
-    paddingVertical: 16,
-    backgroundColor: '#2d6a4f',
-    borderRadius: 12,
-  },
-  submitBtnDisabled: { backgroundColor: '#a0b8ad' },
-  submitText: { fontSize: 16, fontWeight: '700', color: '#fff' },
-
   hint: {
     textAlign: 'center',
     fontSize: 12,
     color: '#999',
-    marginTop: 10,
+    marginTop: 24,
     marginHorizontal: 24,
   },
-
-  // Submitted view
-  successContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 32,
-  },
-  successIcon: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
-    backgroundColor: '#2d6a4f',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 24,
-  },
-  successTitle: { fontSize: 24, fontWeight: '700', color: '#1a1a1a', textAlign: 'center' },
-  successSub:   { fontSize: 14, color: '#666', marginTop: 8, textAlign: 'center' },
-  successBy:    { fontSize: 14, color: '#888', marginTop: 4, textAlign: 'center' },
-  lockedNote: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 32,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    backgroundColor: '#f5f5f5',
-    borderRadius: 8,
-  },
-  lockedText: { fontSize: 13, color: '#888' },
-  reopenBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 28,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: '#2d6a4f',
-  },
-  reopenText: { fontSize: 15, fontWeight: '600', color: '#2d6a4f' },
 });

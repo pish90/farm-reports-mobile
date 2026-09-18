@@ -10,7 +10,6 @@ interface Props {
   control: Control<LivestockFormValues>;
   errors: FieldErrors<LivestockFormValues>;
   watch: UseFormWatch<LivestockFormValues>;
-  isSubmitted: boolean;
   note: string;
   onNoteChange: (category: string, note: string) => void;
 }
@@ -25,7 +24,7 @@ function parseCount(val: string | undefined): number {
 }
 
 export default function LivestockSection({
-  category, types, control, errors, watch, isSubmitted, note, onNoteChange,
+  category, types, control, errors, watch, note, onNoteChange,
 }: Props) {
   const values = watch();
   const total = types.reduce((sum, t) => sum + parseCount(values[`count_${t.id}`]), 0);
@@ -58,7 +57,7 @@ export default function LivestockSection({
                 }}
                 render={({ field: { onChange, onBlur, value } }) => (
                   <TextInput
-                    style={[styles.input, hasError && styles.inputError, isSubmitted && styles.inputDisabled]}
+                    style={[styles.input, hasError && styles.inputError]}
                     value={value}
                     onChangeText={onChange}
                     onBlur={onBlur}
@@ -67,7 +66,6 @@ export default function LivestockSection({
                     selectTextOnFocus
                     placeholder="0"
                     placeholderTextColor="#bbb"
-                    editable={!isSubmitted}
                   />
                 )}
               />
@@ -87,13 +85,12 @@ export default function LivestockSection({
       <View style={styles.noteRow}>
         <Text style={styles.noteLabel}>Comment</Text>
         <TextInput
-          style={[styles.noteInput, isSubmitted && styles.noteInputDisabled]}
+          style={styles.noteInput}
           value={note}
           onChangeText={(t) => onNoteChange(category, t)}
           placeholder={`Notes for ${toTitle(category)} section (optional)`}
           placeholderTextColor="#bbb"
           multiline
-          editable={!isSubmitted}
           maxLength={500}
         />
       </View>
@@ -144,7 +141,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#fafafa',
   },
   inputError:    { borderColor: '#e53e3e' },
-  inputDisabled: { backgroundColor: '#f5f5f5', borderColor: '#ebebeb', color: '#bbb' },
   fieldError: { color: '#e53e3e', fontSize: 11, marginTop: 2 },
   totalRow: {
     flexDirection: 'row',
@@ -175,5 +171,4 @@ const styles = StyleSheet.create({
     minHeight: 48,
     textAlignVertical: 'top',
   },
-  noteInputDisabled: { backgroundColor: '#f5f5f5', borderColor: '#ebebeb', color: '#bbb' },
 });

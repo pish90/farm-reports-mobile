@@ -112,13 +112,10 @@ interface AdminExpenseRowProps {
   onDelete: (e: ServerExpense) => void;
   onViewReceipts?: (uris: string[]) => void;
   receiptUris?: string[];
-  isSubmitted: boolean;
-  readOnly?: boolean;
 }
 
-function AdminExpenseRow({ expense, onEdit, onDelete, onViewReceipts, receiptUris = [], isSubmitted, readOnly = false }: AdminExpenseRowProps) {
+function AdminExpenseRow({ expense, onEdit, onDelete, onViewReceipts, receiptUris = [] }: AdminExpenseRowProps) {
   function renderRightActions() {
-    if (isSubmitted || readOnly) return null;
     return (
       <TouchableOpacity style={styles.deleteAction} onPress={() => onDelete(expense)}>
         <Feather name="trash-2" size={18} color="#fff" />
@@ -131,8 +128,8 @@ function AdminExpenseRow({ expense, onEdit, onDelete, onViewReceipts, receiptUri
     <Swipeable renderRightActions={renderRightActions} overshootRight={false}>
       <TouchableOpacity
         style={styles.expenseRow}
-        onPress={() => !isSubmitted && !readOnly && onEdit(expense)}
-        activeOpacity={isSubmitted || readOnly ? 1 : 0.7}
+        onPress={() => onEdit(expense)}
+        activeOpacity={0.7}
       >
         <View style={styles.entryBadge}>
           <Text style={styles.entryNo}>{expense.entryNo}</Text>
@@ -156,7 +153,7 @@ function AdminExpenseRow({ expense, onEdit, onDelete, onViewReceipts, receiptUri
           </TouchableOpacity>
         )}
         <Text style={styles.expenseCost}>{expense.cost.toFixed(2)}</Text>
-        {!isSubmitted && !readOnly && <Feather name="chevron-right" size={16} color="#ccc" style={{ marginLeft: 4 }} />}
+        <Feather name="chevron-right" size={16} color="#ccc" style={{ marginLeft: 4 }} />
       </TouchableOpacity>
     </Swipeable>
   );
@@ -194,8 +191,6 @@ export default function AdminFarmDetailScreen({ route, navigation }: Props) {
   const [receiptUris,  setReceiptUris]  = useState<string[]>([]);
   const [receiptIdx,   setReceiptIdx]   = useState(0);
   const [receiptMap,   setReceiptMap]   = useState<Record<number, string[]>>({});
-
-  const isSubmitted = report?.status === 'SUBMITTED';
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -257,56 +252,6 @@ export default function AdminFarmDetailScreen({ route, navigation }: Props) {
     }
   }
 
-  async function handleReopen() {
-    if (!report) return;
-    Alert.alert(
-      'Reopen Report',
-      `Reopen ${farmName}'s ${MONTHS[month - 1]} ${year} report for editing?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Reopen', style: 'destructive',
-          onPress: async () => {
-            setIsSaving(true);
-            try {
-              const updated = await adminService.reopenReport(report.id);
-              setReport(updated);
-            } catch {
-              Alert.alert('Error', 'Failed to reopen report.');
-            } finally {
-              setIsSaving(false);
-            }
-          },
-        },
-      ],
-    );
-  }
-
-  async function handleSubmit() {
-    if (!report) return;
-    Alert.alert(
-      'Submit Report',
-      `Submit ${farmName}'s ${MONTHS[month - 1]} ${year} report?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Submit', style: 'default',
-          onPress: async () => {
-            setIsSaving(true);
-            try {
-              const updated = await adminService.submitReport(report.id, farmId);
-              setReport(updated);
-            } catch (err: any) {
-              Alert.alert('Error', err?.response?.data?.message ?? 'Failed to submit report.');
-            } finally {
-              setIsSaving(false);
-            }
-          },
-        },
-      ],
-    );
-  }
-
   async function handleExport() {
     if (!report) return;
     setIsExporting(true);
@@ -320,7 +265,7 @@ export default function AdminFarmDetailScreen({ route, navigation }: Props) {
   }
 
   const handleSaveExpense = useCallback(async (values: ExpenseFormValues) => {
-    if (!report || isSubmitted) return;
+    if (!report) return;
     setFormVisible(false);
 
     const day  = parseInt(values.day, 10);
@@ -403,10 +348,10 @@ export default function AdminFarmDetailScreen({ route, navigation }: Props) {
     } finally {
       setIsSaving(false);
     }
-  }, [report, editingExpense, year, month, farmId, isSubmitted]);
+  }, [report, editingExpense, year, month, farmId]);
 
   const handleDeleteExpense = useCallback(async (expense: ServerExpense) => {
-    if (!report || isSubmitted) return;
+    if (!report) return;
     const filtered = report.expenses
       .filter(e => e.id !== expense.id)
       .map((e, i) => ({ ...e, entryNo: i + 1 }));
@@ -422,7 +367,7 @@ export default function AdminFarmDetailScreen({ route, navigation }: Props) {
     } finally {
       setIsSaving(false);
     }
-  }, [report, year, month, farmId, isSubmitted]);
+  }, [report, year, month, farmId]);
 
   if (isLoading) {
     return (
@@ -469,50 +414,7 @@ export default function AdminFarmDetailScreen({ route, navigation }: Props) {
     <View style={styles.container}>
       {/* Status bar */}
       <View style={styles.statusBar}>
-        <View>
-          <Text style={styles.periodText}>{MONTHS[month - 1]} {year}</Text>
-          <View style={[
-            styles.statusBadge,
-            isSubmitted ? styles.statusSubmitted : styles.statusDraft,
-          ]}>
-            <Text style={[styles.statusText, isSubmitted ? styles.statusTextSubmitted : styles.statusTextDraft]}>
-              {isSubmitted ? 'Submitted' : 'In Progress'}
-            </Text>
-          </View>
-        </View>
-        {!isOpsManager && (
-          <View style={styles.actionBtns}>
-            {isSubmitted ? (
-              !isManager && (
-                <TouchableOpacity
-                  style={[styles.actionBtn, styles.reopenBtn, isSaving && styles.actionBtnDisabled]}
-                  onPress={handleReopen}
-                  disabled={isSaving}
-                >
-                  {isSaving ? <ActivityIndicator size="small" color="#fff" /> : (
-                    <>
-                      <Feather name="unlock" size={14} color="#fff" />
-                      <Text style={styles.actionBtnText}>Reopen</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-              )
-            ) : (
-              <TouchableOpacity
-                style={[styles.actionBtn, styles.submitBtn, isSaving && styles.actionBtnDisabled]}
-                onPress={handleSubmit}
-                disabled={isSaving}
-              >
-                {isSaving ? <ActivityIndicator size="small" color="#fff" /> : (
-                  <>
-                    <Feather name="check-circle" size={14} color="#fff" />
-                    <Text style={styles.actionBtnText}>Submit</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
+        <Text style={styles.periodText}>{MONTHS[month - 1]} {year}</Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
@@ -617,8 +519,6 @@ export default function AdminFarmDetailScreen({ route, navigation }: Props) {
                 onDelete={handleDeleteExpense}
                 receiptUris={receiptMap[exp.id] ?? []}
                 onViewReceipts={uris => { setReceiptUris(uris); setReceiptIdx(0); }}
-                isSubmitted={isSubmitted}
-                readOnly={false}
               />
             ))
         )}
@@ -627,15 +527,13 @@ export default function AdminFarmDetailScreen({ route, navigation }: Props) {
       </ScrollView>
 
       {/* FAB: add expense */}
-      {!isSubmitted && (
-        <TouchableOpacity
-          style={styles.fab}
-          onPress={() => { setEditingExpense(null); setFormVisible(true); }}
-          activeOpacity={0.85}
-        >
-          <Feather name="plus" size={28} color="#fff" />
-        </TouchableOpacity>
-      )}
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => { setEditingExpense(null); setFormVisible(true); }}
+        activeOpacity={0.85}
+      >
+        <Feather name="plus" size={28} color="#fff" />
+      </TouchableOpacity>
 
       <ExpenseForm
         visible={formVisible}
@@ -693,19 +591,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff', paddingHorizontal: 16, paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#e8e8e8',
   },
-  periodText:          { fontSize: 14, color: '#555', marginBottom: 4 },
-  statusBadge:         { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, alignSelf: 'flex-start' },
-  statusSubmitted:     { backgroundColor: '#D8F3DC' },
-  statusDraft:         { backgroundColor: '#FFF8E1' },
-  statusText:          { fontSize: 12, fontWeight: '600' },
-  statusTextSubmitted: { color: '#2D6A4F' },
-  statusTextDraft:     { color: '#F59E0B' },
-  actionBtns:          { flexDirection: 'row', gap: 8 },
-  actionBtn:           { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
-  actionBtnDisabled:   { opacity: 0.6 },
-  reopenBtn:           { backgroundColor: '#52B788' },
-  submitBtn:           { backgroundColor: '#2d6a4f' },
-  actionBtnText:       { color: '#fff', fontSize: 13, fontWeight: '600' },
+  periodText:          { fontSize: 14, color: '#555' },
   headerExportBtn:     { padding: 4, marginRight: 4 },
 
   // Section headers
