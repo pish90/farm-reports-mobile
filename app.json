@@ -6,11 +6,6 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.farmreports.app"
@@ -34,6 +29,17 @@
           "photosPermission": "Allow Farm Reports to access photos for receipt images.",
           "cameraPermission": "Allow Farm Reports to use the camera to capture receipt images."
         }
+      ],
+      "expo-sharing",
+      "expo-font",
+      "expo-status-bar",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff"
+        }
       ]
     ],
     "extra": {
@@ -41,9 +47,8 @@
         "projectId": "bdb6a038-448e-4bd1-977a-b5da6a662739"
       }
     },
-    "privacy": "public",
     "owner": "pklife",
-    "runtimeVersion": "exposdk:54.0.0",
+    "runtimeVersion": "exposdk:57.0.0",
     "updates": {
       "url": "https://u.expo.dev/bdb6a038-448e-4bd1-977a-b5da6a662739",
       "fallbackToCacheTimeout": 30000,

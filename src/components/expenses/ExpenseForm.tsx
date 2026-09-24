@@ -344,7 +344,7 @@ export default function ExpenseForm({ visible, year, month, initial, isEditing, 
 }
 
 const styles = StyleSheet.create({
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)' },
+  backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.4)' },
   kvWrap:   { flex: 1, justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: '#fff',
@@ -419,7 +419,7 @@ const styles = StyleSheet.create({
   pctWarning: { color: '#e53e3e', fontWeight: '600' },
 
   dropdownBackdrop: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
     backgroundColor: 'rgba(0,0,0,0.4)',
     zIndex: 50,
     elevation: 10,
@@ -470,9 +470,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#e53e3e', alignItems: 'center', justifyContent: 'center',
   },
 
-  previewBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.92)' },
+  previewBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.92)' },
   previewContainer: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
     alignItems: 'center', justifyContent: 'center',
   },
   previewImage: { width: '100%', height: '80%' },

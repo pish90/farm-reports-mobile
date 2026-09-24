@@ -549,9 +549,11 @@ export default function AdminFarmDetailScreen({ route, navigation }: Props) {
 
       <Modal visible={receiptUris.length > 0} transparent animationType="fade" onRequestClose={() => setReceiptUris([])}>
         <View style={styles.receiptOverlay}>
-          <TouchableOpacity style={StyleSheet.absoluteFillObject} activeOpacity={1} onPress={() => setReceiptUris([])} />
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setReceiptUris([])} />
           {receiptUris[receiptIdx] ? (
-            <Image source={{ uri: receiptUris[receiptIdx] }} style={styles.receiptFullImage} resizeMode="contain" pointerEvents="none" />
+            <View pointerEvents="none">
+              <Image source={{ uri: receiptUris[receiptIdx] }} style={styles.receiptFullImage} resizeMode="contain" />
+            </View>
           ) : null}
           {receiptUris.length > 1 && (
             <>

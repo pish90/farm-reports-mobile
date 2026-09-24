@@ -305,7 +305,7 @@ const styles = StyleSheet.create({
   rowSubtitle: { fontSize: 12, color: '#aaa', marginTop: 2 },
 
   // Modal styles
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)' },
+  backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.4)' },
   kvWrap:   { flex: 1, justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20,

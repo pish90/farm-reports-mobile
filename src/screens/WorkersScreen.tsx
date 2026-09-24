@@ -155,7 +155,7 @@ function AddEmployeeModal({
       {
         text: 'Take Photo', onPress: async () => {
           if (!p.granted) { Alert.alert('Permission required', 'Camera access needed.'); return; }
-          const r = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.6, base64: true });
+          const r = await ImagePicker.launchCameraAsync({ mediaTypes: 'images', allowsEditing: true, aspect: [1, 1], quality: 0.6, base64: true });
           if (!r.canceled && r.assets[0]) applyAsset(r.assets[0]);
         },
       },
@@ -163,7 +163,7 @@ function AddEmployeeModal({
         text: 'Choose from Library', onPress: async () => {
           const q = await ImagePicker.requestMediaLibraryPermissionsAsync();
           if (!q.granted) { Alert.alert('Permission required', 'Photo library access needed.'); return; }
-          const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.6, base64: true });
+          const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', allowsEditing: true, aspect: [1, 1], quality: 0.6, base64: true });
           if (!r.canceled && r.assets[0]) applyAsset(r.assets[0]);
         },
       },
