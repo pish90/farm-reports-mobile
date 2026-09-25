@@ -1,0 +1,40 @@
+name: EAS Update
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "EAS update branch"
+        required: true
+        default: preview
+      environment:
+        description: "EAS environment (loads env vars from EAS, e.g. EXPO_PUBLIC_API_URL)"
+        required: true
+        default: preview
+      message:
+        description: "Update message"
+        required: true
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - run: npm ci
+
+      - run: |
+          eas update \
+            --branch "${{ github.event.inputs.branch }}" \
+            --environment "${{ github.event.inputs.environment }}" \
+            --message "${{ github.event.inputs.message }}" \
+            --non-interactive
