@@ -97,47 +97,44 @@ export default function ExpensesScreen() {
       const report = await getOrCreateLocalReport(user!.farmId!, year, month);
       setLocalReportId(report.id);
 
-      // Pull from server when local is empty and no local-edit is pending
+      // Pull from server whenever there's no local edit still pending sync — not just when
+      // local is empty. A farm's admin can amend/re-import expenses on the web at any time
+      // (Feedback 12's import-to-amend), and a "pull only if empty" gate meant a phone that
+      // had already synced anything for this report would never see those corrections again
+      // (Feedback 13). Safe to always overwrite here because saveExpenses is delete-then-
+      // reinsert and we only do this when nothing local is waiting to be pushed up.
       if (report.server_report_id) {
-        const localCnt = await getDb().getFirstAsync<{ cnt: number }>(
-          'SELECT COUNT(*) as cnt FROM local_expenses WHERE report_id = ?',
-          [report.id],
-        );
-        if (localCnt?.cnt === 0) {
-          const pending = await getPendingSyncs(report.id);
-          if (!pending.some(p => p.section === 'expenses')) {
-            try {
-              const res = await apiClient.get('/reports', {
-                params: { farmId: user!.farmId!, year, month },
-              });
-              const serverExpenses: ServerExpense[] = res.data.data?.expenses ?? [];
-              if (serverExpenses.length > 0) {
-                await saveExpenses(report.id, serverExpenses.map(e => ({
-                  entry_no: e.entryNo,
-                  date: e.date,
-                  supplier_contractor: e.supplierContractor,
-                  receipt_no: e.receiptNo,
-                  cost: Number(e.cost),
-                  description: e.description,
-                  category_id: e.categoryId,
-                  category_code: e.categoryCode,
-                  category_name: e.categoryName,
-                  business_unit_id: e.businessUnitId,
-                  business_unit_code: e.businessUnitCode,
-                  business_unit_name: e.businessUnitName,
-                  receipt_image_uri: null,
-                  apportionments: e.apportionments.map(ap => ({
-                    business_unit_id: ap.businessUnitId,
-                    business_unit_code: ap.businessUnitCode,
-                    business_unit_name: ap.businessUnitName,
-                    percentage: Number(ap.percentage),
-                    amount: Number(ap.amount),
-                  })),
-                })));
-              }
-            } catch {
-              // Server unreachable — continue with local data
-            }
+        const pending = await getPendingSyncs(report.id);
+        if (!pending.some(p => p.section === 'expenses')) {
+          try {
+            const res = await apiClient.get('/reports', {
+              params: { farmId: user!.farmId!, year, month },
+            });
+            const serverExpenses: ServerExpense[] = res.data.data?.expenses ?? [];
+            await saveExpenses(report.id, serverExpenses.map(e => ({
+              entry_no: e.entryNo,
+              date: e.date,
+              supplier_contractor: e.supplierContractor,
+              receipt_no: e.receiptNo,
+              cost: Number(e.cost),
+              description: e.description,
+              category_id: e.categoryId,
+              category_code: e.categoryCode,
+              category_name: e.categoryName,
+              business_unit_id: e.businessUnitId,
+              business_unit_code: e.businessUnitCode,
+              business_unit_name: e.businessUnitName,
+              receipt_image_uri: null,
+              apportionments: e.apportionments.map(ap => ({
+                business_unit_id: ap.businessUnitId,
+                business_unit_code: ap.businessUnitCode,
+                business_unit_name: ap.businessUnitName,
+                percentage: Number(ap.percentage),
+                amount: Number(ap.amount),
+              })),
+            })));
+          } catch {
+            // Server unreachable — continue with local data
           }
         }
       }
