@@ -45,11 +45,11 @@ function fmt(n: number): string {
 interface FooterProps {
   totalLitres: number;
   pricePerLitre: number;
-  isAdmin?: boolean;
+  canEditPrice?: boolean;
   onPriceChange?: (price: number) => void;
 }
 
-function MilkFooter({ totalLitres, pricePerLitre, isAdmin, onPriceChange }: FooterProps) {
+function MilkFooter({ totalLitres, pricePerLitre, canEditPrice, onPriceChange }: FooterProps) {
   const [editingPrice, setEditingPrice] = useState<string | null>(null);
   const grandTotal = totalLitres * pricePerLitre;
 
@@ -67,8 +67,8 @@ function MilkFooter({ totalLitres, pricePerLitre, isAdmin, onPriceChange }: Foot
       </View>
       <TouchableOpacity
         style={[footerStyles.row, footerStyles.grandRow]}
-        onPress={isAdmin && editingPrice === null ? () => setEditingPrice(String(pricePerLitre)) : undefined}
-        activeOpacity={isAdmin ? 0.75 : 1}
+        onPress={canEditPrice && editingPrice === null ? () => setEditingPrice(String(pricePerLitre)) : undefined}
+        activeOpacity={canEditPrice ? 0.75 : 1}
       >
         <View style={footerStyles.grandLabelRow}>
           {editingPrice !== null ? (
@@ -90,7 +90,7 @@ function MilkFooter({ totalLitres, pricePerLitre, isAdmin, onPriceChange }: Foot
           ) : (
             <>
               <Text style={footerStyles.grandLabel}>Value (×{pricePerLitre})</Text>
-              {isAdmin && <Feather name="edit-2" size={11} color="rgba(255,255,255,0.6)" style={{ marginLeft: 6 }} />}
+              {canEditPrice && <Feather name="edit-2" size={11} color="rgba(255,255,255,0.6)" style={{ marginLeft: 6 }} />}
             </>
           )}
         </View>
@@ -138,7 +138,11 @@ const footerStyles = StyleSheet.create({
 export default function MilkScreen() {
   const { user } = useAuth();
   const now = new Date();
-  const isAdmin = user?.role === 'ADMIN';
+  // MilkScreen is only ever reached via the farm-scoped tab bar (MANAGER/WORKER) — ADMIN
+  // never sees this tab (MainNavigator hides it for admins) and the admin farm-detail drill-down
+  // renders its own read-only summary instead, so gating this on ADMIN made it unreachable by
+  // anyone (Feedback 14). MANAGER is this screen's real "configures the price" role.
+  const canEditPrice = user?.role === 'MANAGER' || user?.role === 'ADMIN';
 
   const [year,       setYear]       = useState(now.getFullYear());
   const [month,      setMonth]      = useState(now.getMonth() + 1);
@@ -310,11 +314,11 @@ export default function MilkScreen() {
       <MilkFooter
         totalLitres={totalLitres}
         pricePerLitre={milkPrice}
-        isAdmin={isAdmin}
+        canEditPrice={canEditPrice}
         onPriceChange={handlePriceChange}
       />
     ),
-    [totalLitres, milkPrice, isAdmin],
+    [totalLitres, milkPrice, canEditPrice],
   );
 
   // ── Main render ─────────────────────────────────────────────────────────
