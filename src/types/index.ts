@@ -217,7 +217,9 @@ export interface FarmLiveStatus {
   farmName: string;
   year: number;
   month: number;
-  reportStatus: 'NOT_STARTED' | 'DRAFT';
+  // 'SUBMITTED' is legacy — Feedback 11 removed the submission workflow, but reports
+  // submitted before that change still carry it in the database forever.
+  reportStatus: 'NOT_STARTED' | 'DRAFT' | 'SUBMITTED';
   reportId: number | null;
   activeWorkers: number;
   payrollEntriesRecorded: number;

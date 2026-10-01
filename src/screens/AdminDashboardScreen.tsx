@@ -26,10 +26,15 @@ const MONTHS = [
 ];
 
 function StatusBadge({ status }: { status: FarmLiveStatus['reportStatus'] }) {
-  const cfg = {
+  const CONFIG = {
     NOT_STARTED: { label: 'Not Started', bg: '#f0f0f0', color: '#888' },
     DRAFT:       { label: 'Recording',   bg: '#D8F3DC', color: '#2D6A4F' },
-  }[status];
+    // No live/draft distinction since Feedback 11 removed the submission workflow — a
+    // legacy SUBMITTED report (from before that change) still has data, so it reads the
+    // same as "Recording" rather than crashing on an unrecognized status.
+    SUBMITTED:   { label: 'Recording',   bg: '#D8F3DC', color: '#2D6A4F' },
+  };
+  const cfg = CONFIG[status] ?? CONFIG.DRAFT;
   return (
     <View style={[styles.badge, { backgroundColor: cfg.bg }]}>
       <Text style={[styles.badgeText, { color: cfg.color }]}>{cfg.label}</Text>
@@ -137,7 +142,8 @@ export default function AdminDashboardScreen() {
     }
   }
 
-  const recording   = farms.filter(f => f.reportStatus === 'DRAFT').length;
+  // Counts as "recording" if it has a report at all, draft or legacy-submitted alike.
+  const recording   = farms.filter(f => f.reportStatus !== 'NOT_STARTED').length;
   const notStarted  = farms.filter(f => f.reportStatus === 'NOT_STARTED').length;
 
   return (
