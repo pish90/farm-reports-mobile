@@ -20,6 +20,7 @@ import {
   getPendingSyncs,
   markSectionDirty,
   saveExpenses,
+  updateServerReportId,
 } from '../../db/reportRepository';
 import apiClient from '../../services/apiClient';
 import {
@@ -103,14 +104,25 @@ export default function ExpensesScreen() {
       // had already synced anything for this report would never see those corrections again
       // (Feedback 13). Safe to always overwrite here because saveExpenses is delete-then-
       // reinsert and we only do this when nothing local is waiting to be pushed up.
-      if (report.server_report_id) {
-        const pending = await getPendingSyncs(report.id);
-        if (!pending.some(p => p.section === 'expenses')) {
-          try {
-            const res = await apiClient.get('/reports', {
-              params: { farmId: user!.farmId!, year, month },
-            });
-            const serverExpenses: ServerExpense[] = res.data.data?.expenses ?? [];
+      //
+      // Unlike the old code, this no longer waits on report.server_report_id already being
+      // known — that field is only populated once *some* screen successfully pulls for this
+      // report, and Expenses wasn't doing that itself. On a brand-new device/report where
+      // Expenses is opened before Livestock or Milk, server_report_id was still null forever,
+      // so this block never ran at all. Now it discovers and stores it itself, same as
+      // LivestockScreen/MilkScreen already do.
+      const pending = await getPendingSyncs(report.id);
+      if (!pending.some(p => p.section === 'expenses')) {
+        try {
+          const res = await apiClient.get('/reports', {
+            params: { farmId: user!.farmId!, year, month },
+          });
+          const serverReport = res.data?.data;
+          if (serverReport?.id) {
+            if (!report.server_report_id) {
+              await updateServerReportId(report.id, serverReport.id);
+            }
+            const serverExpenses: ServerExpense[] = serverReport.expenses ?? [];
             await saveExpenses(report.id, serverExpenses.map(e => ({
               entry_no: e.entryNo,
               date: e.date,
@@ -133,9 +145,9 @@ export default function ExpensesScreen() {
                 amount: Number(ap.amount),
               })),
             })));
-          } catch {
-            // Server unreachable — continue with local data
           }
+        } catch {
+          // Server unreachable — continue with local data
         }
       }
 
