@@ -131,7 +131,7 @@ export default function SelectCasualsScreen() {
           onEndReached={loadMore}
           onEndReachedThreshold={0.3}
           ListFooterComponent={
-            loadingMore ? <ActivityIndicator size="small" color="#7c3aed" style={{ paddingVertical: 16 }} /> : null
+            loadingMore ? <ActivityIndicator size="small" color="#7c3aed" style={{ paddingVertical: 16 }} /> : undefined
           }
           renderItem={({ item }) => {
             const isChecked = checked.has(item.id);

@@ -1086,7 +1086,7 @@ export default function WorkersScreen() {
           onEndReached={loadMore}
           onEndReachedThreshold={0.3}
           ListFooterComponent={
-            loadingMore ? <ActivityIndicator size="small" color="#2d6a4f" style={{ paddingVertical: 16 }} /> : null
+            loadingMore ? <ActivityIndicator size="small" color="#2d6a4f" style={{ paddingVertical: 16 }} /> : undefined
           }
           ListEmptyComponent={
             <View style={styles.empty}>

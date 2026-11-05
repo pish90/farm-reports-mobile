@@ -390,7 +390,7 @@ export default function ExpensesScreen() {
                   <Text style={styles.totalLabel}>Total</Text>
                   <Text style={styles.totalValue}>{total.toFixed(2)}</Text>
                 </View>
-              ) : null
+              ) : undefined
             }
             contentContainerStyle={expenses.length === 0 ? styles.emptyContainer : styles.listContent}
             keyboardShouldPersistTaps="handled"

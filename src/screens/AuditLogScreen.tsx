@@ -293,9 +293,9 @@ export default function AuditLogScreen() {
           ListFooterComponent={
             loadingMore ? (
               <ActivityIndicator size="small" color="#2d6a4f" style={{ paddingVertical: 16 }} />
-            ) : hasMore ? null : logs.length > PAGE_SIZE ? (
+            ) : hasMore ? undefined : logs.length > PAGE_SIZE ? (
               <Text style={styles.endText}>All events loaded</Text>
-            ) : null
+            ) : undefined
           }
         />
       )}

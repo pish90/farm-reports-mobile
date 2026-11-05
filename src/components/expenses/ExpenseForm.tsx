@@ -116,7 +116,7 @@ function Dropdown<T>({ title, items, getKey, getLabel, onSelect, onClose }: Drop
 
 export default function ExpenseForm({ visible, year, month, initial, isEditing, categories, businessUnits, onSave, onCancel }: Props) {
   const daysInMonth = getDaysInMonth(year, month);
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
 
   const [previewUri, setPreviewUri] = useState<string | null>(null);
 
@@ -320,7 +320,7 @@ export default function ExpenseForm({ visible, year, month, initial, isEditing, 
             <TouchableOpacity style={styles.cancelBtn} onPress={onCancel}>
               <Text style={styles.cancelText}>Cancel</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.saveBtn} onPress={handleSubmit(onSave)}>
+            <TouchableOpacity style={styles.saveBtn} onPress={() => handleSubmit(onSave)()}>
               <Text style={styles.saveText}>Save</Text>
             </TouchableOpacity>
           </View>

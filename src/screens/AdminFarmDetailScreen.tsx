@@ -13,7 +13,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Swipeable } from 'react-native-gesture-handler';
+import Swipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { ApportionmentValue, ExpenseFormValues } from '../components/expenses/ExpenseForm';
 import ExpenseForm from '../components/expenses/ExpenseForm';
 import {

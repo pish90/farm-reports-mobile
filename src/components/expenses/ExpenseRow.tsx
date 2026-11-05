@@ -1,7 +1,8 @@
 import { Feather } from '@expo/vector-icons';
 import { useRef } from 'react';
-import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { Swipeable } from 'react-native-gesture-handler';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import Swipeable, { SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
+import Animated, { Extrapolation, SharedValue, interpolate, useAnimatedStyle } from 'react-native-reanimated';
 import { LocalExpenseRecord } from '../../db/reportRepository';
 
 function formatDate(iso: string): string {
@@ -23,32 +24,36 @@ interface Props {
   onViewReceipts?: (uris: string[]) => void;
 }
 
+// A separate component because useAnimatedStyle is a hook and renderRightActions is a plain callback.
+function DeleteAction({ progress, onPress }: { progress: SharedValue<number>; onPress: () => void }) {
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: interpolate(progress.value, [0, 1], [80, 0], Extrapolation.CLAMP) }],
+  }));
+
+  return (
+    <Animated.View style={[styles.deleteAction, animatedStyle]}>
+      <TouchableOpacity style={styles.deleteBtn} onPress={onPress}>
+        <Feather name="trash-2" size={18} color="#fff" />
+        <Text style={styles.deleteLabel}>Delete</Text>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
+
 export default function ExpenseRow({ expense, onEdit, onDelete, onViewReceipts }: Props) {
-  const swipeRef = useRef<Swipeable>(null);
+  const swipeRef = useRef<SwipeableMethods>(null);
 
   function handleDelete() {
     swipeRef.current?.close();
     onDelete(expense);
   }
 
-  function renderRightActions(progress: Animated.AnimatedInterpolation<number>) {
-    const translateX = progress.interpolate({
-      inputRange: [0, 1],
-      outputRange: [80, 0],
-      extrapolate: 'clamp',
-    });
-    return (
-      <Animated.View style={[styles.deleteAction, { transform: [{ translateX }] }]}>
-        <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete}>
-          <Feather name="trash-2" size={18} color="#fff" />
-          <Text style={styles.deleteLabel}>Delete</Text>
-        </TouchableOpacity>
-      </Animated.View>
-    );
-  }
-
   return (
-    <Swipeable ref={swipeRef} renderRightActions={renderRightActions} overshootRight={false}>
+    <Swipeable
+      ref={swipeRef}
+      renderRightActions={(progress) => <DeleteAction progress={progress} onPress={handleDelete} />}
+      overshootRight={false}
+    >
       <TouchableOpacity style={styles.row} onPress={() => onEdit(expense)} activeOpacity={0.7}>
         <View style={styles.entryBadge}>
           <Text style={styles.entryNo}>{expense.entry_no}</Text>
