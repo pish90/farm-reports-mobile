@@ -23,6 +23,7 @@ import DateField from '../components/shared/DateField';
 import YearSelector from '../components/shared/YearSelector';
 import {
   createEmployee,
+  deleteEmployeePayment,
   getEmployeeLedger,
   getEmployeeSummary,
   getEmployees,
@@ -30,6 +31,7 @@ import {
   updateEmployee,
 } from '../services/employeeService';
 import {
+  deletePayment as deleteCasualPayment,
   getCasualLabourerLedger,
   getCasualLabourerSummary,
   recordPayment,
@@ -389,6 +391,7 @@ function EmployeeDetailModal({
   const [rowEarned, setRowEarned] = useState('');
   const [rowPaid, setRowPaid] = useState('');
   const [savingRow, setSavingRow] = useState(false);
+  const [deletingPaymentId, setDeletingPaymentId] = useState<number | null>(null);
 
   useEffect(() => {
     if (!visible || !employee) return;
@@ -413,20 +416,60 @@ function EmployeeDetailModal({
     loadLedger('casual');
   }, [visible, employee?.id, isCasual, casualLedgerYear]);
 
-  async function loadLedger(kind: 'salaried' | 'casual') {
-    if (!employee) return;
+  async function loadLedger(kind: 'salaried' | 'casual'): Promise<EmployeeLedgerDto | null> {
+    if (!employee) return null;
     const setLoading = kind === 'salaried' ? setLoadingSalariedLedger : setLoadingCasualLedger;
     const setData = kind === 'salaried' ? setSalariedLedger : setCasualLedger;
     const year = kind === 'salaried' ? salariedLedgerYear : casualLedgerYear;
     setLoading(true);
     try {
-      setData(kind === 'salaried'
+      const data = kind === 'salaried'
         ? await getEmployeeLedger(farmId, employee.id, year)
-        : await getCasualLabourerLedger(farmId, employee.id, year));
+        : await getCasualLabourerLedger(farmId, employee.id, year);
+      setData(data);
+      return data;
     } catch {
       setData(null);
+      return null;
     } finally {
       setLoading(false);
+    }
+  }
+
+  /** The individual payments that make up one ledger month's Paid figure (bucketed by payment date). */
+  function paymentsForMonth(kind: 'salaried' | 'casual', year: number, month: number) {
+    const all = (kind === 'salaried' ? salariedSummary?.payments : casualSummary?.payments) ?? [];
+    const prefix = `${year}-${String(month).padStart(2, '0')}-`;
+    return all.filter(p => p.paymentDate.startsWith(prefix));
+  }
+
+  function confirmDeletePayment(kind: 'salaried' | 'casual', payment: { id: number; amount: number; paymentDate: string }) {
+    if (!employee) return;
+    Alert.alert(
+      'Delete Payment?',
+      `Remove the payment of KSh ${Number(payment.amount).toLocaleString()} on ${payment.paymentDate}? This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => handleDeletePayment(kind, payment.id) },
+      ],
+    );
+  }
+
+  async function handleDeletePayment(kind: 'salaried' | 'casual', paymentId: number) {
+    if (!employee) return;
+    setDeletingPaymentId(paymentId);
+    try {
+      if (kind === 'salaried') await deleteEmployeePayment(farmId, employee.id, paymentId);
+      else await deleteCasualPayment(farmId, employee.id, paymentId);
+      const ledger = await loadLedger(kind);
+      await loadData();
+      // Keep the row open, showing the month's new Paid total
+      const month = ledger?.months.find(mm => mm.month === editingMonth);
+      if (month) setRowPaid(String(month.paid));
+    } catch (e: any) {
+      Alert.alert('Error', e.message ?? 'Failed to delete payment.');
+    } finally {
+      setDeletingPaymentId(null);
     }
   }
 
@@ -457,10 +500,18 @@ function EmployeeDetailModal({
     if (!ledger) return;
     const monthData = ledger.months.find(mm => mm.month === editingMonth);
     if (!monthData) return;
+    const newEarned = parseFloat(rowEarned.replace(/,/g, '')) || 0;
+    const newPaid = parseFloat(rowPaid.replace(/,/g, '')) || 0;
+    // Check before writing anything, so a refused Paid change doesn't half-save the Earned change
+    if (newPaid < monthData.paid) {
+      Alert.alert(
+        'Reduce Paid by Deleting a Payment',
+        'To reduce Paid, delete the wrong payment in the list under this month. Nothing has been saved.',
+      );
+      return;
+    }
     setSavingRow(true);
     try {
-      const newEarned = parseFloat(rowEarned.replace(/,/g, '')) || 0;
-      const newPaid = parseFloat(rowPaid.replace(/,/g, '')) || 0;
 
       if (editingSalaried) {
         const existingRows = await getPayroll(farmId, ledgerYear, editingMonth);
@@ -486,11 +537,6 @@ function EmployeeDetailModal({
         } else {
           await recordPayment(farmId, employee.id, { paymentDate, amount: delta, note: 'Ledger adjustment' });
         }
-      } else if (delta < 0) {
-        Alert.alert(
-          'Cannot Reduce Paid Amount',
-          'Paid amounts can only be increased from here. To reduce a recorded payment, use the web console.',
-        );
       }
 
       const kind = editingKind;
@@ -631,7 +677,8 @@ function EmployeeDetailModal({
             </View>
             {ledger.months.map(m => (
               editingKind === kind && editingMonth === m.month ? (
-                <View key={m.month} style={detS.ledgerEditRow}>
+                <View key={m.month}>
+                <View style={detS.ledgerEditRow}>
                   <Text style={[detS.ledgerCell, detS.ledgerMonthCell]}>{MONTH_ABBR[m.month - 1]}</Text>
                   <TextInput
                     style={detS.ledgerEditInput}
@@ -658,6 +705,41 @@ function EmployeeDetailModal({
                         : <Feather name="check" size={16} color={accentColor} />}
                     </TouchableOpacity>
                   </View>
+                </View>
+                {(() => {
+                  const monthPayments = paymentsForMonth(kind, year, m.month);
+                  return (
+                    <View style={detS.monthPayments}>
+                      <Text style={detS.monthPaymentsTitle}>
+                        {monthPayments.length ? `Payments in ${MONTH_ABBR[m.month - 1]}` : `No payments recorded in ${MONTH_ABBR[m.month - 1]}`}
+                      </Text>
+                      {monthPayments.map(p => (
+                        <View key={p.id} style={detS.monthPaymentRow}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={detS.monthPaymentAmount}>
+                              KSh {Number(p.amount).toLocaleString()}
+                              <Text style={detS.monthPaymentMeta}>  {p.paymentDate}</Text>
+                            </Text>
+                            {(p.note || p.paidBy) ? (
+                              <Text style={detS.monthPaymentMeta} numberOfLines={1}>
+                                {[p.note, p.paidBy && `by ${p.paidBy}`].filter(Boolean).join(' · ')}
+                              </Text>
+                            ) : null}
+                          </View>
+                          <TouchableOpacity
+                            onPress={() => confirmDeletePayment(kind, p)}
+                            hitSlop={8}
+                            disabled={deletingPaymentId != null || savingRow}
+                          >
+                            {deletingPaymentId === p.id
+                              ? <ActivityIndicator size="small" color="#dc2626" />
+                              : <Feather name="trash-2" size={16} color="#dc2626" />}
+                          </TouchableOpacity>
+                        </View>
+                      ))}
+                    </View>
+                  );
+                })()}
                 </View>
               ) : (
                 <TouchableOpacity
@@ -929,6 +1011,11 @@ const detS = StyleSheet.create({
   ledgerEditRow:      { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#f0f0f0', backgroundColor: '#fafffb' },
   ledgerEditInput:    { flex: 1, fontSize: 12, borderWidth: 1, borderColor: '#ddd', borderRadius: 4, paddingHorizontal: 4, paddingVertical: 2, marginHorizontal: 2, textAlign: 'right', color: '#1a1a1a' },
   ledgerEditActions:  { flexDirection: 'row', gap: 8, marginLeft: 6 },
+  monthPayments:      { backgroundColor: '#fafffb', paddingHorizontal: 12, paddingBottom: 8 },
+  monthPaymentsTitle: { fontSize: 11, fontWeight: '700', color: '#888', textTransform: 'uppercase', marginTop: 2, marginBottom: 4 },
+  monthPaymentRow:    { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#eee' },
+  monthPaymentAmount: { fontSize: 13, fontWeight: '600', color: '#1a1a1a' },
+  monthPaymentMeta:   { fontSize: 11, fontWeight: '400', color: '#888' },
 });
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
